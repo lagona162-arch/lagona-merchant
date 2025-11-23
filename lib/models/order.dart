@@ -1,0 +1,282 @@
+import 'product.dart';
+
+enum DeliveryStatus {
+  pending,
+  accepted, // Used for orders with rider assigned, waiting for payment (To Approve tab)
+  waitingForPayment, // Alias for accepted (for code clarity)
+  paymentReceived,
+  prepared,
+  ready,
+  completed,
+  cancelled,
+}
+
+extension DeliveryStatusExtension on DeliveryStatus {
+  String get value {
+    switch (this) {
+      case DeliveryStatus.pending:
+        return 'pending';
+      case DeliveryStatus.accepted:
+        return 'accepted';
+      case DeliveryStatus.waitingForPayment:
+        return 'accepted'; // Use 'accepted' status for orders waiting for payment
+      case DeliveryStatus.paymentReceived:
+        return 'payment_received';
+      case DeliveryStatus.prepared:
+        return 'prepared';
+      case DeliveryStatus.ready:
+        return 'ready';
+      case DeliveryStatus.completed:
+        return 'completed';
+      case DeliveryStatus.cancelled:
+        return 'cancelled';
+    }
+  }
+
+  static DeliveryStatus fromString(String value) {
+    switch (value) {
+      case 'pending':
+        return DeliveryStatus.pending;
+      case 'accepted':
+      case 'waiting_for_payment':
+        // Map 'accepted' status to waitingForPayment for orders with rider assigned waiting for payment
+        return DeliveryStatus.waitingForPayment;
+      case 'payment_received':
+        return DeliveryStatus.paymentReceived;
+      case 'prepared':
+        return DeliveryStatus.prepared;
+      case 'ready':
+        return DeliveryStatus.ready;
+      case 'completed':
+        return DeliveryStatus.completed;
+      case 'cancelled':
+        return DeliveryStatus.cancelled;
+      default:
+        return DeliveryStatus.pending;
+    }
+  }
+}
+
+class Delivery {
+  final String id;
+  final String type;
+  final String? customerId;
+  final String? merchantId;
+  final String? riderId;
+  final String? loadingStationId;
+  final String? businessHubId;
+  final String? pickupAddress;
+  final String? dropoffAddress;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final double? dropoffLatitude;
+  final double? dropoffLongitude;
+  final double? distanceKm;
+  final double? deliveryFee;
+  final double? commissionRider;
+  final double? commissionLoading;
+  final double? commissionHub;
+  final DeliveryStatus status;
+  final String? buyerMerchantTagId;
+  final String? buyerRiderTagId;
+  final DateTime? completedAt;
+  final DateTime createdAt;
+  final List<DeliveryItem>? items;
+  // Customer information from nested users query
+  final String? customerName;
+  final String? customerEmail;
+
+  Delivery({
+    required this.id,
+    required this.type,
+    this.customerId,
+    this.merchantId,
+    this.riderId,
+    this.loadingStationId,
+    this.businessHubId,
+    this.pickupAddress,
+    this.dropoffAddress,
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.dropoffLatitude,
+    this.dropoffLongitude,
+    this.distanceKm,
+    this.deliveryFee,
+    this.commissionRider,
+    this.commissionLoading,
+    this.commissionHub,
+    required this.status,
+    this.buyerMerchantTagId,
+    this.buyerRiderTagId,
+    this.completedAt,
+    required this.createdAt,
+    this.items,
+    this.customerName,
+    this.customerEmail,
+  });
+
+  factory Delivery.fromJson(Map<String, dynamic> json) {
+    // Extract nested users data (customer information)
+    // Path: customers -> users
+    Map<String, dynamic>? usersData;
+    
+    // Try to extract from customers.users
+    if (json['customers'] != null) {
+      Map<String, dynamic>? customersData;
+      if (json['customers'] is Map) {
+        customersData = json['customers'] as Map<String, dynamic>;
+      } else if (json['customers'] is List && (json['customers'] as List).isNotEmpty) {
+        customersData = (json['customers'] as List).first as Map<String, dynamic>?;
+      }
+      
+      if (customersData != null && customersData['users'] != null) {
+        if (customersData['users'] is Map) {
+          usersData = customersData['users'] as Map<String, dynamic>;
+        } else if (customersData['users'] is List && (customersData['users'] as List).isNotEmpty) {
+          usersData = (customersData['users'] as List).first as Map<String, dynamic>?;
+        }
+      }
+    }
+    
+    // Fallback: try direct users access (if query structure is different)
+    if (usersData == null && json['users'] != null) {
+      if (json['users'] is Map) {
+        usersData = json['users'] as Map<String, dynamic>;
+      } else if (json['users'] is List && (json['users'] as List).isNotEmpty) {
+        usersData = (json['users'] as List).first as Map<String, dynamic>?;
+      }
+    }
+
+    return Delivery(
+      id: json['id'] as String,
+      type: json['type'] as String,
+      customerId: json['customer_id'] as String?,
+      merchantId: json['merchant_id'] as String?,
+      riderId: json['rider_id'] as String?,
+      loadingStationId: json['loading_station_id'] as String?,
+      businessHubId: json['business_hub_id'] as String?,
+      pickupAddress: json['pickup_address'] as String?,
+      dropoffAddress: json['dropoff_address'] as String?,
+      pickupLatitude: json['pickup_latitude'] != null
+          ? (json['pickup_latitude'] as num).toDouble()
+          : null,
+      pickupLongitude: json['pickup_longitude'] != null
+          ? (json['pickup_longitude'] as num).toDouble()
+          : null,
+      dropoffLatitude: json['dropoff_latitude'] != null
+          ? (json['dropoff_latitude'] as num).toDouble()
+          : null,
+      dropoffLongitude: json['dropoff_longitude'] != null
+          ? (json['dropoff_longitude'] as num).toDouble()
+          : null,
+      distanceKm: json['distance_km'] != null
+          ? (json['distance_km'] as num).toDouble()
+          : null,
+      deliveryFee: json['delivery_fee'] != null
+          ? (json['delivery_fee'] as num).toDouble()
+          : null,
+      commissionRider: json['commission_rider'] != null
+          ? (json['commission_rider'] as num).toDouble()
+          : null,
+      commissionLoading: json['commission_loading'] != null
+          ? (json['commission_loading'] as num).toDouble()
+          : null,
+      commissionHub: json['commission_hub'] != null
+          ? (json['commission_hub'] as num).toDouble()
+          : null,
+      status: DeliveryStatusExtension.fromString(
+        json['status'] as String? ?? 'pending',
+      ),
+      buyerMerchantTagId: json['buyer_merchant_tag_id'] as String?,
+      buyerRiderTagId: json['buyer_rider_tag_id'] as String?,
+      completedAt: json['completed_at'] != null
+          ? DateTime.parse(json['completed_at'] as String)
+          : null,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      customerName: usersData?['full_name'] as String?,
+      customerEmail: usersData?['email'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type,
+      'customer_id': customerId,
+      'merchant_id': merchantId,
+      'rider_id': riderId,
+      'loading_station_id': loadingStationId,
+      'business_hub_id': businessHubId,
+      'pickup_address': pickupAddress,
+      'dropoff_address': dropoffAddress,
+      'pickup_latitude': pickupLatitude,
+      'pickup_longitude': pickupLongitude,
+      'dropoff_latitude': dropoffLatitude,
+      'dropoff_longitude': dropoffLongitude,
+      'distance_km': distanceKm,
+      'delivery_fee': deliveryFee,
+      'commission_rider': commissionRider,
+      'commission_loading': commissionLoading,
+      'commission_hub': commissionHub,
+      'status': status.value,
+      'buyer_merchant_tag_id': buyerMerchantTagId,
+      'buyer_rider_tag_id': buyerRiderTagId,
+      'completed_at': completedAt?.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+}
+
+class DeliveryItem {
+  final String id;
+  final String deliveryId;
+  final String productId;
+  final int quantity;
+  final double subtotal;
+  final MerchantProduct? product;
+
+  DeliveryItem({
+    required this.id,
+    required this.deliveryId,
+    required this.productId,
+    this.quantity = 1,
+    required this.subtotal,
+    this.product,
+  });
+
+  factory DeliveryItem.fromJson(Map<String, dynamic> json) {
+    // Handle both 'product' and 'merchant_products' keys from different query formats
+    Map<String, dynamic>? productJson;
+    if (json['merchant_products'] != null) {
+      productJson = json['merchant_products'] is Map<String, dynamic>
+          ? json['merchant_products'] as Map<String, dynamic>
+          : null;
+    } else if (json['product'] != null) {
+      productJson = json['product'] is Map<String, dynamic>
+          ? json['product'] as Map<String, dynamic>
+          : null;
+    }
+    
+    return DeliveryItem(
+      id: json['id'] as String,
+      deliveryId: json['delivery_id'] as String,
+      productId: json['product_id'] as String,
+      quantity: json['quantity'] as int? ?? 1,
+      subtotal: (json['subtotal'] as num).toDouble(),
+      product: productJson != null
+          ? MerchantProduct.fromJson(productJson)
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'delivery_id': deliveryId,
+      'product_id': productId,
+      'quantity': quantity,
+      'subtotal': subtotal,
+    };
+  }
+}
+
