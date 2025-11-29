@@ -19,7 +19,7 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
   final ImagePicker _picker = ImagePicker();
 
   File? _logoImage;
-  String? _currentLogoUrl; // Store the current logo URL from merchant
+  String? _currentLogoUrl;
   bool _isLoading = false;
   String? _currentMerchantId;
   Merchant? _merchant;
@@ -39,7 +39,7 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
       setState(() {
         _currentMerchantId = merchant.id;
         _merchant = merchant;
-        _currentLogoUrl = merchant.previewImage; // Load existing logo URL
+        _currentLogoUrl = merchant.previewImage;
       });
     }
   }
@@ -48,7 +48,7 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
     final XFile? image = await _picker.pickImage(source: source);
     if (image != null) {
       setState(() {
-        _logoImage = File(image.path);
+          _logoImage = File(image.path);
       });
     }
   }
@@ -77,18 +77,16 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Upload logo if provided
+
       if (_logoImage != null) {
         final logoUrl = await MerchantService.uploadLogo(_logoImage!);
         await MerchantService.updateMerchant(
           merchantId: _currentMerchantId!,
           previewImage: logoUrl,
         );
-        
-        // Reload merchant data to get updated logo URL
+
         await _loadMerchantData();
-        
-        // Clear the selected image after successful upload
+
         setState(() {
           _logoImage = null;
         });
@@ -128,10 +126,10 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Logo Upload
+
               _buildSectionHeader('Logo Upload'),
               const SizedBox(height: 12),
               const Text(
@@ -142,12 +140,11 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
               _buildImagePicker(
                 'Business Logo',
                 _logoImage,
-                _currentLogoUrl, // Pass existing logo URL
+                _currentLogoUrl,
                 true,
               ),
               const SizedBox(height: 24),
 
-              // Save Button
               ElevatedButton(
                 onPressed: _isLoading ? null : _saveConfiguration,
                 style: ElevatedButton.styleFrom(
@@ -167,8 +164,8 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
                     : const Text('Save Configuration'),
               ),
             ],
-          ),
         ),
+      ),
     );
   }
 
@@ -191,16 +188,16 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
         const SizedBox(height: 8),
         GestureDetector(
           onTap: () {
-            // If there's a logo, show full screen; otherwise, open image picker
+
             if ((file != null) || (currentUrl != null && currentUrl!.isNotEmpty)) {
-              // Logo exists - show full screen
+
               if (file != null) {
                 _showLogoFullScreen(file: file);
               } else if (currentUrl != null && currentUrl!.isNotEmpty) {
                 _showLogoFullScreen(imageUrl: currentUrl);
               }
             } else {
-              // No logo - open image picker
+
               _showImageSourceDialog();
             }
           },
@@ -217,8 +214,8 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
-              ],
-            ),
+                      ],
+                    ),
             child: _buildImageContent(file, currentUrl),
           ),
         ),
@@ -227,16 +224,15 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
             padding: const EdgeInsets.only(top: 8.0),
             child: TextButton.icon(
               onPressed: () async {
-                // If there's a current logo URL, remove it from the database
+
                 if (currentUrl != null && file == null && _currentMerchantId != null) {
-                  // Remove existing logo - update merchant with null to clear
+
                   try {
                     await SupabaseService.client
                         .from('merchants')
                         .update({'preview_image': null})
                         .eq('id', _currentMerchantId!);
-                    
-                    // Reload merchant data
+
                     await _loadMerchantData();
                   } catch (e) {
                     if (mounted) {
@@ -250,9 +246,9 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
                     return;
                   }
                 }
-                
+
                 setState(() {
-                  _logoImage = null;
+                    _logoImage = null;
                   _currentLogoUrl = null;
                 });
               },
@@ -265,11 +261,11 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
   }
 
   Widget _buildImageContent(File? file, String? currentUrl) {
-    // Priority: Show new file if selected, otherwise show existing URL
+
     if (file != null) {
       return Stack(
         children: [
-          // Logo image with proper centering and contain fit
+
           Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -284,7 +280,7 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
               ),
             ),
           ),
-          // Subtle overlay badge
+
           Positioned(
             bottom: 12,
             right: 12,
@@ -316,7 +312,7 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
     } else if (currentUrl != null && currentUrl.isNotEmpty) {
       return Stack(
         children: [
-          // Logo image with proper centering and contain fit
+
           Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -358,7 +354,7 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
               ),
             ),
           ),
-          // Subtle overlay badge
+
           Positioned(
             bottom: 12,
             right: 12,
@@ -464,7 +460,6 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
     );
   }
 
-  // Show logo in full screen
   void _showLogoFullScreen({File? file, String? imageUrl}) {
     showDialog(
       context: context,
@@ -535,4 +530,3 @@ class _SetupConfigurationScreenState extends State<SetupConfigurationScreen> {
     );
   }
 }
-

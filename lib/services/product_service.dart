@@ -5,7 +5,7 @@ import '../services/supabase_service.dart';
 import '../services/merchant_service.dart';
 
 class ProductService {
-  // Get current merchant ID
+
   static Future<String?> _getMerchantId() async {
     final userId = SupabaseService.currentUser?.id;
     if (userId == null) return null;
@@ -14,7 +14,6 @@ class ProductService {
     return merchant?.id;
   }
 
-  // Get all categories
   static Future<List<String>> getCategories() async {
     final merchantId = await _getMerchantId();
     if (merchantId == null) return [];
@@ -33,19 +32,15 @@ class ProductService {
     return categories;
   }
 
-  // Add category - creates a hidden placeholder product to establish the category
   static Future<void> addCategory(String category) async {
     final merchantId = await _getMerchantId();
     if (merchantId == null) throw Exception('Merchant not found');
 
-    // Check if category already exists
     final existingCategories = await getCategories();
     if (existingCategories.contains(category)) {
       throw Exception('Category already exists');
     }
 
-    // Create a hidden placeholder product to establish the category
-    // The category will be available for selection when creating products
     final result = await SupabaseService.client.from('merchant_products').insert({
       'merchant_id': merchantId,
       'name': '_CATEGORY_PLACEHOLDER_$category',
@@ -54,14 +49,12 @@ class ProductService {
       'stock': 0,
     }).select();
 
-    // Keep the placeholder but mark it as hidden via naming convention
-    // When fetching products for display, we'll filter these out
+
     if (result.isEmpty) {
       throw Exception('Failed to create category');
     }
   }
 
-  // Update category
   static Future<void> updateCategory(String oldCategory, String newCategory) async {
     final merchantId = await _getMerchantId();
     if (merchantId == null) return;
@@ -73,12 +66,10 @@ class ProductService {
         .eq('category', oldCategory);
   }
 
-  // Delete category (only if no products use it)
   static Future<void> deleteCategory(String category) async {
     final merchantId = await _getMerchantId();
     if (merchantId == null) return;
 
-    // Check for actual products (not placeholders) using this category
     final products = await SupabaseService.client
         .from('merchant_products')
         .select()
@@ -90,7 +81,6 @@ class ProductService {
       throw Exception('Cannot delete category with existing products');
     }
 
-    // Delete the placeholder product for this category
     await SupabaseService.client
         .from('merchant_products')
         .delete()
@@ -99,7 +89,6 @@ class ProductService {
         .like('name', '_CATEGORY_PLACEHOLDER_%');
   }
 
-  // Get all products (excluding category placeholders)
   static Future<List<MerchantProduct>> getProducts() async {
     final merchantId = await _getMerchantId();
     if (merchantId == null) return [];
@@ -114,7 +103,6 @@ class ProductService {
     return response.map((json) => MerchantProduct.fromJson(json)).toList();
   }
 
-  // Add product
   static Future<void> addProduct({
     required String name,
     String? category,
@@ -140,7 +128,6 @@ class ProductService {
     });
   }
 
-  // Update product
   static Future<void> updateProduct({
     required String productId,
     required String name,
@@ -167,7 +154,6 @@ class ProductService {
         .eq('id', productId);
   }
 
-  // Delete product
   static Future<void> deleteProduct(String productId) async {
     await SupabaseService.client
         .from('merchant_products')
@@ -175,22 +161,17 @@ class ProductService {
         .eq('id', productId);
   }
 
-  // Helper to upload product images
   static Future<String> _uploadProductImage(File file) async {
     final userId = SupabaseService.currentUser?.id;
     if (userId == null) throw Exception('User not authenticated');
 
-    // Use merchant-image bucket with merchant-product folder structure
-    // Path structure: {userId}/merchant-product/{filename} to match merchant-image bucket RLS policy [1] = userId
     final fileName =
         '${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
     final filePath = '$userId/merchant-product/$fileName';
-    
-    // Debug: Print path for troubleshooting
+
     debugPrint('Uploading product image to bucket: merchant-image, path: $filePath with userId: $userId');
     final fileBytes = await file.readAsBytes();
 
-    // Upload file - try to upload, if file exists, remove and re-upload
     try {
       await SupabaseService.client.storage
           .from('merchant-image')
@@ -199,7 +180,7 @@ class ProductService {
             fileBytes,
           );
     } catch (e) {
-      // If upload fails because file exists, try to remove it first
+
       if (e.toString().contains('already exists') || e.toString().contains('409')) {
         try {
           await SupabaseService.client.storage
@@ -226,4 +207,3 @@ class ProductService {
     return publicUrl;
   }
 }
-

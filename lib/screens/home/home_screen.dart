@@ -23,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _checkAuth() {
-    // Listen to auth state changes
+
     SupabaseService.client.auth.onAuthStateChange.listen((data) {
       if (mounted) {
         _verifyMerchantRole();
@@ -46,13 +46,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      // Check if user has merchant role first
+
       final role = await SupabaseService.getUserRole();
-      
+
       if (role != 'merchant') {
-        // User is not a merchant, sign them out silently
+
         await SupabaseService.signOut();
-        
+
         if (mounted) {
           setState(() {
             _isMerchant = false;
@@ -62,12 +62,10 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      // User has merchant role - check if merchant is verified and approved
       final isMerchant = await SupabaseService.isMerchant();
-      
+
       if (!isMerchant) {
-        // Merchant exists but not approved yet - sign out silently (no error shown)
-        // The login screen will show appropriate message when they try to log in
+
         await SupabaseService.signOut();
       }
 
@@ -78,14 +76,14 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } catch (e) {
-      // If error checking role, sign out silently
+
       debugPrint('Error verifying merchant role: $e');
       try {
         await SupabaseService.signOut();
       } catch (signOutError) {
         debugPrint('Error signing out: $signOutError');
       }
-      
+
       if (mounted) {
         setState(() {
           _isMerchant = false;
@@ -97,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Show loading while checking role
+
     if (_isCheckingRole) {
       return const Scaffold(
         body: Center(
@@ -106,12 +104,10 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // Check if user is logged in and is a merchant
     if (SupabaseService.isSignedIn && _isMerchant) {
       return const MerchantDashboardScreen();
     }
-    
+
     return const LoginScreen();
   }
 }
-

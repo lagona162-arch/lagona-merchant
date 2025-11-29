@@ -33,13 +33,12 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text,
       );
 
-      // Check if user is a merchant
       final role = await SupabaseService.getUserRole();
-      
+
       if (role != 'merchant') {
-        // User is not a merchant, sign them out
+
         await SupabaseService.signOut();
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -52,17 +51,16 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Check if user is active (approved by admin)
       final userData = await SupabaseService.client
           .from('users')
           .select('is_active, access_status')
           .eq('id', SupabaseService.currentUser!.id)
           .maybeSingle();
-      
+
       if (userData == null || !(userData['is_active'] as bool? ?? false)) {
-        // User is not active (not approved yet)
+
         await SupabaseService.signOut();
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -75,13 +73,12 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Check if merchant record exists (trigger should have created it on approval)
       final merchantExists = await MerchantService.getMerchantByUserId(SupabaseService.currentUser!.id);
-      
+
       if (merchantExists == null) {
-        // Merchant record doesn't exist - trigger hasn't run yet or no pending data
+
         await SupabaseService.signOut();
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -94,18 +91,18 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Merchant record exists - verify it's approved
+
       final merchantData = await SupabaseService.client
           .from('merchants')
           .select('verified, access_status')
           .eq('id', SupabaseService.currentUser!.id)
           .maybeSingle();
-      
+
       if (merchantData == null || 
           !(merchantData['verified'] as bool? ?? false) || 
           (merchantData['access_status'] as String? ?? 'pending') != 'approved') {
         await SupabaseService.signOut();
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -162,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Logo/Icon - Flat Color Blocking
+
                     Container(
                       width: 120,
                       height: 120,
@@ -181,8 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
-                    
-                    // Title
+
                     const Text(
                       'Lagona Merchant',
                       style: TextStyle(
@@ -201,7 +197,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 48),
 
-                    // Email Field
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -232,7 +227,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Password Field
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -270,7 +264,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 32),
 
-                    // Login Button
                     SizedBox(
                       width: double.infinity,
                       height: 56,
@@ -305,7 +298,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Register Link
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -343,4 +335,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-

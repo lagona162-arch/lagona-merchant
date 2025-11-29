@@ -2,11 +2,13 @@ import 'product.dart';
 
 enum DeliveryStatus {
   pending,
-  accepted, // Used for orders with rider assigned, waiting for payment (To Approve tab)
-  waitingForPayment, // Alias for accepted (for code clarity)
+  accepted,
+  waitingForPayment,
   paymentReceived,
   prepared,
   ready,
+  pickedUp,
+  inTransit,
   completed,
   cancelled,
 }
@@ -19,13 +21,17 @@ extension DeliveryStatusExtension on DeliveryStatus {
       case DeliveryStatus.accepted:
         return 'accepted';
       case DeliveryStatus.waitingForPayment:
-        return 'accepted'; // Use 'accepted' status for orders waiting for payment
+        return 'accepted';
       case DeliveryStatus.paymentReceived:
         return 'payment_received';
       case DeliveryStatus.prepared:
         return 'prepared';
       case DeliveryStatus.ready:
         return 'ready';
+      case DeliveryStatus.pickedUp:
+        return 'picked_up';
+      case DeliveryStatus.inTransit:
+        return 'in_transit';
       case DeliveryStatus.completed:
         return 'completed';
       case DeliveryStatus.cancelled:
@@ -39,7 +45,6 @@ extension DeliveryStatusExtension on DeliveryStatus {
         return DeliveryStatus.pending;
       case 'accepted':
       case 'waiting_for_payment':
-        // Map 'accepted' status to waitingForPayment for orders with rider assigned waiting for payment
         return DeliveryStatus.waitingForPayment;
       case 'payment_received':
         return DeliveryStatus.paymentReceived;
@@ -47,6 +52,10 @@ extension DeliveryStatusExtension on DeliveryStatus {
         return DeliveryStatus.prepared;
       case 'ready':
         return DeliveryStatus.ready;
+      case 'picked_up':
+        return DeliveryStatus.pickedUp;
+      case 'in_transit':
+        return DeliveryStatus.inTransit;
       case 'completed':
         return DeliveryStatus.completed;
       case 'cancelled':
@@ -71,6 +80,8 @@ class Delivery {
   final double? pickupLongitude;
   final double? dropoffLatitude;
   final double? dropoffLongitude;
+  final String? pickupPhotoUrl;
+  final String? dropoffPhotoUrl;
   final double? distanceKm;
   final double? deliveryFee;
   final double? commissionRider;
@@ -82,7 +93,7 @@ class Delivery {
   final DateTime? completedAt;
   final DateTime createdAt;
   final List<DeliveryItem>? items;
-  // Customer information from nested users query
+
   final String? customerName;
   final String? customerEmail;
 
@@ -100,6 +111,8 @@ class Delivery {
     this.pickupLongitude,
     this.dropoffLatitude,
     this.dropoffLongitude,
+    this.pickupPhotoUrl,
+    this.dropoffPhotoUrl,
     this.distanceKm,
     this.deliveryFee,
     this.commissionRider,
@@ -116,11 +129,9 @@ class Delivery {
   });
 
   factory Delivery.fromJson(Map<String, dynamic> json) {
-    // Extract nested users data (customer information)
-    // Path: customers -> users
+
     Map<String, dynamic>? usersData;
-    
-    // Try to extract from customers.users
+
     if (json['customers'] != null) {
       Map<String, dynamic>? customersData;
       if (json['customers'] is Map) {
@@ -128,7 +139,7 @@ class Delivery {
       } else if (json['customers'] is List && (json['customers'] as List).isNotEmpty) {
         customersData = (json['customers'] as List).first as Map<String, dynamic>?;
       }
-      
+
       if (customersData != null && customersData['users'] != null) {
         if (customersData['users'] is Map) {
           usersData = customersData['users'] as Map<String, dynamic>;
@@ -137,8 +148,7 @@ class Delivery {
         }
       }
     }
-    
-    // Fallback: try direct users access (if query structure is different)
+
     if (usersData == null && json['users'] != null) {
       if (json['users'] is Map) {
         usersData = json['users'] as Map<String, dynamic>;
@@ -169,6 +179,8 @@ class Delivery {
       dropoffLongitude: json['dropoff_longitude'] != null
           ? (json['dropoff_longitude'] as num).toDouble()
           : null,
+      pickupPhotoUrl: json['pickup_photo_url'] as String?,
+      dropoffPhotoUrl: json['dropoff_photo_url'] as String?,
       distanceKm: json['distance_km'] != null
           ? (json['distance_km'] as num).toDouble()
           : null,
@@ -213,6 +225,8 @@ class Delivery {
       'pickup_longitude': pickupLongitude,
       'dropoff_latitude': dropoffLatitude,
       'dropoff_longitude': dropoffLongitude,
+      'pickup_photo_url': pickupPhotoUrl,
+      'dropoff_photo_url': dropoffPhotoUrl,
       'distance_km': distanceKm,
       'delivery_fee': deliveryFee,
       'commission_rider': commissionRider,
@@ -245,7 +259,7 @@ class DeliveryItem {
   });
 
   factory DeliveryItem.fromJson(Map<String, dynamic> json) {
-    // Handle both 'product' and 'merchant_products' keys from different query formats
+
     Map<String, dynamic>? productJson;
     if (json['merchant_products'] != null) {
       productJson = json['merchant_products'] is Map<String, dynamic>
@@ -256,7 +270,7 @@ class DeliveryItem {
           ? json['product'] as Map<String, dynamic>
           : null;
     }
-    
+
     return DeliveryItem(
       id: json['id'] as String,
       deliveryId: json['delivery_id'] as String,
@@ -279,4 +293,3 @@ class DeliveryItem {
     };
   }
 }
-

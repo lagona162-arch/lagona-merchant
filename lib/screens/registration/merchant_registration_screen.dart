@@ -33,13 +33,12 @@ class _MerchantRegistrationScreenState
 
   File? _dtiCertificate;
   File? _mayorPermit;
-  String? _selectedDocumentType; // 'dti' or 'mayor_permit' or null
+  String? _selectedDocumentType;
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
-  
-  // Address details from Google Places
+
   double? _selectedLatitude;
   double? _selectedLongitude;
   String? _selectedPlaceId;
@@ -67,7 +66,7 @@ class _MerchantRegistrationScreenState
     setState(() => _isLoading = true);
 
     try {
-      // Create user account
+
       final authResponse = await SupabaseService.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
@@ -79,16 +78,12 @@ class _MerchantRegistrationScreenState
         throw Exception('Failed to create user account');
       }
 
-      // Check if we have an active session from signup
-      // The session should be automatically set by signUp if email confirmation is disabled
       final hasSession = authResponse.session != null || SupabaseService.isSignedIn;
       debugPrint('Has active session after signup: $hasSession');
       debugPrint('Auth response user ID: ${authResponse.user?.id}');
       debugPrint('Current Supabase user ID: ${SupabaseService.currentUser?.id}');
       debugPrint('Session from auth response: ${authResponse.session != null}');
-      
-      // Session is automatically set by signUp - no need to manually set it
-      // Verify the session is available for RLS policies
+
       if (hasSession) {
         debugPrint('Session is available - auth.uid() should match: ${SupabaseService.currentUser?.id}');
         debugPrint('Auth UID matches userId: ${SupabaseService.currentUser?.id == authResponse.user?.id}');
@@ -97,7 +92,6 @@ class _MerchantRegistrationScreenState
         debugPrint('This may happen if email confirmation is required');
       }
 
-      // Validate that address was selected from Google Places
       if (_selectedLatitude == null || _selectedLongitude == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -111,21 +105,16 @@ class _MerchantRegistrationScreenState
         return;
       }
 
-      // Save merchant registration data to pending table (will be populated in merchants table on approval)
-      // Upload documents first if provided - files are uploaded during registration
-      // URLs are stored in pending_merchant_registrations and will be copied to merchants table by trigger on approval
       String? dtiUrl;
       String? mayorPermitUrl;
 
-      // Upload files if provided
-      // Documents can now be uploaded even without a session (anon policies allow this during registration)
       if (_dtiCertificate != null) {
         try {
           dtiUrl = await MerchantService.uploadDocument(_dtiCertificate!, 'dti_certificates', authResponse.user!.id);
           debugPrint('DTI certificate uploaded - URL: $dtiUrl');
         } catch (e) {
           debugPrint('Warning: Failed to upload DTI certificate: $e');
-          // Continue without DTI certificate - it's optional
+
         }
       }
 
@@ -135,13 +124,10 @@ class _MerchantRegistrationScreenState
           debugPrint('Mayor permit uploaded - URL: $mayorPermitUrl');
         } catch (e) {
           debugPrint('Warning: Failed to upload Mayor permit: $e');
-          // Continue without Mayor permit - it's optional
+
         }
       }
 
-      // Save merchant registration data to pending table
-      // File URLs (dti_certificate_url, mayor_permit_url) will be copied to merchants table by trigger on approval
-      // The trigger copies: dti_certificate_url -> dti_number (URL), mayor_permit_url -> mayor_permit (URL)
       await SupabaseService.savePendingMerchantData(
         userId: authResponse.user!.id,
         businessName: _businessNameController.text.trim(),
@@ -153,12 +139,10 @@ class _MerchantRegistrationScreenState
         latitude: _selectedLatitude!,
         longitude: _selectedLongitude!,
         placeId: _selectedPlaceId,
-        dtiCertificateUrl: dtiUrl, // Store URL - will be copied to merchants.dti_number by trigger
-        mayorPermitUrl: mayorPermitUrl, // Store URL - will be copied to merchants.mayor_permit by trigger
+        dtiCertificateUrl: dtiUrl,
+        mayorPermitUrl: mayorPermitUrl,
       );
 
-      // Sign out immediately after registration - merchant must wait for admin approval
-      // Only sign out if we have an active session
       if (SupabaseService.isSignedIn) {
         debugPrint('Signing out after registration - waiting for admin approval');
         await SupabaseService.signOut();
@@ -172,7 +156,7 @@ class _MerchantRegistrationScreenState
             duration: Duration(seconds: 5),
           ),
         );
-        // Navigate to login screen after successful registration
+
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (context) => const LoginScreen(),
@@ -181,7 +165,7 @@ class _MerchantRegistrationScreenState
         );
       }
     } catch (e) {
-      // Sign out on error to avoid HomeScreen check
+
       if (SupabaseService.isSignedIn) {
         try {
           await SupabaseService.signOut();
@@ -191,9 +175,9 @@ class _MerchantRegistrationScreenState
       }
 
       if (mounted) {
-        // Show accurate error message
+
         String errorMessage = 'Registration failed';
-        
+
         if (e.toString().contains('email')) {
           errorMessage = 'Registration failed: Email may already be in use. Please try again or sign in.';
         } else if (e.toString().contains('network') || e.toString().contains('connection')) {
@@ -251,7 +235,7 @@ class _MerchantRegistrationScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Header Card - Flat Color Blocking
+
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
@@ -262,7 +246,7 @@ class _MerchantRegistrationScreenState
                   ),
                   child: Column(
                     children: [
-                      // Top Block - Primary Color
+
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
@@ -289,7 +273,7 @@ class _MerchantRegistrationScreenState
                           ],
                         ),
                       ),
-                      // Bottom Block - Secondary Color
+
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
@@ -314,7 +298,6 @@ class _MerchantRegistrationScreenState
                 ),
                 const SizedBox(height: 24),
 
-                // Business Information Card
                 _buildSectionCard(
                   icon: Icons.business_outlined,
                   title: 'Business Information',
@@ -342,12 +325,11 @@ class _MerchantRegistrationScreenState
                           _selectedLatitude = details.latitude;
                           _selectedLongitude = details.longitude;
                           _selectedPlaceId = details.placeId;
-                          
-                          // Auto-fill municipality if available
+
                           final municipality = details.getMunicipality();
                           debugPrint('Place selected - Municipality extracted: $municipality');
                           debugPrint('Address components: ${details.addressComponents.length}');
-                          
+
                           if (municipality != null && municipality.isNotEmpty) {
                             _municipalityController.text = municipality;
                             _lastAutoFilledMunicipality = municipality;
@@ -355,11 +337,10 @@ class _MerchantRegistrationScreenState
                           } else {
                             _municipalityAutoFilled = false;
                             _lastAutoFilledMunicipality = null;
-                            // Try to extract from formatted address as fallback
+
                             final formattedAddress = details.formattedAddress;
                             if (formattedAddress.isNotEmpty) {
-                              // Try to extract municipality from formatted address
-                              // Format is usually: "Street, City/Municipality, Province, Country"
+
                               final parts = formattedAddress.split(',');
                               if (parts.length >= 2) {
                                 final potentialMunicipality = parts[1].trim();
@@ -390,12 +371,12 @@ class _MerchantRegistrationScreenState
                       ],
                       validator: (value) {
                         if (value?.isEmpty ?? true) return 'Required';
-                        // Philippine phone number validation - exactly 11 digits
+
                         final cleaned = value!.replaceAll(RegExp(r'[^\d]'), '');
                         if (cleaned.length != 11) {
                           return 'Must be exactly 11 digits';
                         }
-                        // Must start with 09 or 639
+
                         if (!cleaned.startsWith('09') && !cleaned.startsWith('639')) {
                           return 'Must start with 09 or 639';
                         }
@@ -406,7 +387,6 @@ class _MerchantRegistrationScreenState
                 ),
                 const SizedBox(height: 20),
 
-                // Owner/Manager Information Card
                 _buildSectionCard(
                   icon: Icons.person_outline,
                   title: 'Owner/Manager Information',
@@ -434,12 +414,12 @@ class _MerchantRegistrationScreenState
                       ],
                       validator: (value) {
                         if (value?.isEmpty ?? true) return 'Required';
-                        // Philippine phone number validation - exactly 11 digits
+
                         final cleaned = value!.replaceAll(RegExp(r'[^\d]'), '');
                         if (cleaned.length != 11) {
                           return 'Must be exactly 11 digits';
                         }
-                        // Must start with 09 or 639
+
                         if (!cleaned.startsWith('09') && !cleaned.startsWith('639')) {
                           return 'Must start with 09 or 639';
                         }
@@ -450,7 +430,6 @@ class _MerchantRegistrationScreenState
                 ),
                 const SizedBox(height: 20),
 
-                // Account Information Card
                 _buildSectionCard(
                   icon: Icons.lock_outline,
                   title: 'Account Information',
@@ -504,7 +483,6 @@ class _MerchantRegistrationScreenState
                 ),
                 const SizedBox(height: 20),
 
-                // Document Upload Card - Choice Selector
                 _buildSectionCard(
                   icon: Icons.upload_file_outlined,
                   title: 'Business Documents',
@@ -565,8 +543,7 @@ class _MerchantRegistrationScreenState
                       ),
                     ),
                     const SizedBox(height: 20),
-                    
-                    // Document Type Selector
+
                     Row(
                       children: [
                         Expanded(
@@ -586,8 +563,7 @@ class _MerchantRegistrationScreenState
                         ),
                       ],
                     ),
-                    
-                    // Show upload area only if a document type is selected
+
                     if (_selectedDocumentType != null) ...[
                       const SizedBox(height: 20),
                       _buildDocumentPicker(
@@ -603,7 +579,6 @@ class _MerchantRegistrationScreenState
                 ),
                 const SizedBox(height: 32),
 
-                // Submit Button
                 SizedBox(
                   height: 56,
                   child: ElevatedButton(
@@ -673,7 +648,7 @@ class _MerchantRegistrationScreenState
       ),
       child: Column(
         children: [
-          // Header Block - Flat Color Blocking
+
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -726,7 +701,7 @@ class _MerchantRegistrationScreenState
               ],
             ),
           ),
-          // Content Block - White Background
+
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -817,7 +792,7 @@ class _MerchantRegistrationScreenState
             TextFormField(
             controller: _municipalityController,
             onChanged: (value) {
-              // If user manually edits (different from auto-filled value), clear the flag
+
               if (_municipalityAutoFilled && value != _lastAutoFilledMunicipality) {
                 setState(() {
                   _municipalityAutoFilled = false;
@@ -963,7 +938,7 @@ class _MerchantRegistrationScreenState
       onTap: () {
         setState(() {
           _selectedDocumentType = value;
-          // Clear the other document when switching
+
           if (value == 'dti') {
             _mayorPermit = null;
           } else {
@@ -1169,4 +1144,3 @@ class _MerchantRegistrationScreenState
     );
   }
 }
-

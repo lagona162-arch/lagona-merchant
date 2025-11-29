@@ -5,14 +5,13 @@ import 'screens/home/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Supabase
+
   try {
     await SupabaseService.initialize();
   } catch (e) {
     debugPrint('Failed to initialize Supabase: $e');
   }
-  
+
   runApp(const MyApp());
 }
 

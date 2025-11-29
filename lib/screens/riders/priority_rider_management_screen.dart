@@ -44,7 +44,6 @@ class _PriorityRiderManagementScreenState
 
       _merchantId = merchant.id;
 
-      // Load all riders (filtered by loading_station_id) and priority riders
       final allRiders = await RiderService.getAllRiders(
         loadingStationId: merchant.loadingStationId,
       );
@@ -52,8 +51,6 @@ class _PriorityRiderManagementScreenState
       final priorityOrder =
           await RiderService.getPriorityRiderOrder(_merchantId!);
 
-      // Filter priority riders to only include those that are in allRiders
-      // (i.e., riders with the same loading_station_id)
       final validPriorityRiders = priorityRiders
           .where((pr) => allRiders.any((r) => r.id == pr.id))
           .toList();
@@ -65,7 +62,6 @@ class _PriorityRiderManagementScreenState
         _isLoading = false;
       });
 
-      // Debug: Log rider counts
       debugPrint('Loaded ${allRiders.length} total riders (filtered by loading_station_id)');
       debugPrint('Loaded ${priorityRiders.length} priority riders from DB');
       debugPrint('Filtered to ${validPriorityRiders.length} valid priority riders (with matching loading_station_id)');
@@ -169,7 +165,7 @@ class _PriorityRiderManagementScreenState
   }
 
   void _showAddRiderDialog() {
-    // Check if there are any riders at all
+
     if (_allRiders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -180,7 +176,6 @@ class _PriorityRiderManagementScreenState
       return;
     }
 
-    // Get riders that are not in priority list
     final nonPriorityRiders = _allRiders
         .where((rider) => !_priorityRiders.any((pr) => pr.id == rider.id))
         .toList();
@@ -312,7 +307,7 @@ class _PriorityRiderManagementScreenState
                     )
                   : Column(
                       children: [
-                        // Info banner
+
                         Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
@@ -336,7 +331,7 @@ class _PriorityRiderManagementScreenState
                             ],
                           ),
                         ),
-                        // Priority riders list
+
                         Expanded(
                           child: ReorderableListView.builder(
                             padding: const EdgeInsets.all(16),
@@ -494,7 +489,7 @@ class _PriorityRiderManagementScreenState
         );
       }
     } catch (e) {
-      // Reload to revert changes
+
       _loadMerchantAndRiders();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -507,4 +502,3 @@ class _PriorityRiderManagementScreenState
     }
   }
 }
-

@@ -5,7 +5,6 @@ class GooglePlacesService {
   static const String _apiKey = 'AIzaSyC4EMDLfV7JG21k6yvAu_uRriVQadyIEGg';
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api';
 
-  // Get place autocomplete predictions
   static Future<List<PlacePrediction>> getPlacePredictions(String input) async {
     try {
       final encodedInput = Uri.encodeComponent(input);
@@ -32,7 +31,6 @@ class GooglePlacesService {
     }
   }
 
-  // Get place details by place_id
   static Future<PlaceDetails?> getPlaceDetails(String placeId) async {
     try {
       final url = Uri.parse(
@@ -53,7 +51,6 @@ class GooglePlacesService {
     }
   }
 
-  // Reverse geocoding - get address from coordinates
   static Future<PlaceDetails?> reverseGeocode(double latitude, double longitude) async {
     try {
       final url = Uri.parse(
@@ -136,38 +133,28 @@ class PlaceDetails {
     );
   }
 
-  // Extract municipality/city from address components
   String? getMunicipality() {
-    // Priority order for Philippine addresses:
-    // 1. locality (city/municipality) - highest priority
-    // 2. administrative_area_level_2 (city/municipality in some regions)
-    // 3. sublocality_level_1 (some Philippine addresses use this)
-    // 4. administrative_area_level_1 (province) - last resort fallback
-    
+
     String? municipality;
-    
+
     for (var component in addressComponents) {
-      // Types are already strings, just convert to lowercase for comparison
+
       final types = component.types.map((e) => e.toLowerCase()).toList();
-      
-      // Check for city/municipality (highest priority)
+
       if (types.contains('locality')) {
         municipality = component.longName;
-        break; // Found the best match, stop searching
+        break;
       }
-      
-      // Check for administrative area level 2 (city/municipality in some regions)
+
       if (types.contains('administrative_area_level_2') && municipality == null) {
         municipality = component.longName;
       }
-      
-      // Check for sublocality_level_1 (some Philippine addresses use this)
+
       if (types.contains('sublocality_level_1') && municipality == null) {
         municipality = component.longName;
       }
     }
-    
-    // If still no municipality found, try administrative_area_level_1 (province) as last resort
+
     if (municipality == null) {
       for (var component in addressComponents) {
         final types = component.types.map((e) => e.toLowerCase()).toList();
@@ -177,7 +164,7 @@ class PlaceDetails {
         }
       }
     }
-    
+
     return municipality;
   }
 }
@@ -194,7 +181,7 @@ class AddressComponent {
   });
 
   factory AddressComponent.fromJson(Map<String, dynamic> json) {
-    // Parse types - they come as List<String> from Google Places API
+
     List<String> typesList = [];
     if (json['types'] != null) {
       final types = json['types'] as List<dynamic>;
@@ -206,7 +193,7 @@ class AddressComponent {
         }
       }
     }
-    
+
     return AddressComponent(
       longName: json['long_name'] as String,
       shortName: json['short_name'] as String,
@@ -214,4 +201,3 @@ class AddressComponent {
     );
   }
 }
-

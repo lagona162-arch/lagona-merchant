@@ -22,7 +22,7 @@ class MapPickerScreen extends StatefulWidget {
 
 class _MapPickerScreenState extends State<MapPickerScreen> {
   GoogleMapController? _mapController;
-  LatLng _selectedLocation = const LatLng(14.5995, 120.9842); // Default to Manila, Philippines
+  LatLng _selectedLocation = const LatLng(14.5995, 120.9842);
   String? _selectedAddress;
   bool _isLoadingAddress = false;
   bool _isInitializing = true;
@@ -34,9 +34,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   }
 
   Future<void> _requestLocationPermissionAndInitialize() async {
-    // Request location permission first
+
     await _requestLocationPermission();
-    // Then initialize location
+
     await _initializeLocation();
   }
 
@@ -97,20 +97,20 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         _selectedAddress = widget.initialAddress;
         _isInitializing = false;
       });
-      // Move camera to initial location
+
       if (_mapController != null) {
         await _mapController!.animateCamera(
           CameraUpdate.newLatLngZoom(_selectedLocation, 15),
         );
       }
-      // Get address for initial location
+
       await _getAddressForLocation(_selectedLocation);
     } else {
-      // Set a default location immediately so map shows
+
       setState(() {
         _isInitializing = false;
       });
-      // Then try to get current location
+
       await _getCurrentLocation();
     }
   }
@@ -127,7 +127,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ),
           );
         }
-        // Default to Manila, Philippines
+
         setState(() {
           _selectedLocation = const LatLng(14.5995, 120.9842);
         });
@@ -146,7 +146,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               ),
             );
           }
-          // Default to Manila, Philippines
+
           setState(() {
             _selectedLocation = const LatLng(14.5995, 120.9842);
           });
@@ -163,7 +163,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ),
           );
         }
-        // Default to Manila, Philippines
+
         setState(() {
           _selectedLocation = const LatLng(14.5995, 120.9842);
         });
@@ -172,28 +172,25 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
       Position position = await Geolocator.getCurrentPosition();
       final newLocation = LatLng(position.latitude, position.longitude);
-      
+
       setState(() {
         _selectedLocation = newLocation;
       });
 
-      // Move camera to current location
       if (_mapController != null) {
         await _mapController!.animateCamera(
           CameraUpdate.newLatLngZoom(newLocation, 15),
         );
       }
 
-      // Get address for current location
       await _getAddressForLocation(newLocation);
     } catch (e) {
-      // Default to Manila, Philippines on error
+
       final defaultLocation = const LatLng(14.5995, 120.9842);
       setState(() {
         _selectedLocation = defaultLocation;
       });
-      
-      // Move camera to default location
+
       if (_mapController != null) {
         await _mapController!.animateCamera(
           CameraUpdate.newLatLngZoom(defaultLocation, 15),
@@ -241,8 +238,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    
-    // Ensure camera is positioned correctly when map is created
+
     Future.delayed(const Duration(milliseconds: 100), () async {
       if (_mapController != null && mounted) {
         await _mapController!.animateCamera(
@@ -294,7 +290,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             zoomControlsEnabled: false,
             compassEnabled: true,
           ),
-          
+
           if (_isInitializing)
             Container(
               color: Colors.black.withOpacity(0.3),
@@ -302,8 +298,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                 child: CircularProgressIndicator(),
               ),
             ),
-          
-          // Current Location Button
+
           Positioned(
             top: 16,
             right: 16,
@@ -318,7 +313,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ),
           ),
 
-          // Address Display
           Positioned(
             bottom: 100,
             left: 16,
@@ -391,7 +385,6 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
             ),
           ),
 
-          // Confirm Button
           Positioned(
             bottom: 16,
             left: 16,
@@ -427,4 +420,3 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     super.dispose();
   }
 }
-

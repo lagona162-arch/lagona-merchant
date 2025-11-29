@@ -43,7 +43,7 @@ class _PaymentsTransactionsScreenState
         _currentQrUrl = merchant.gcashQrUrl;
         _currentGcashNumber = merchant.gcashNumber;
         _gcashNumberController.text = merchant.gcashNumber ?? '';
-        // If there's a saved GCash number, start in read-only mode
+
         _isEditingGcashNumber = merchant.gcashNumber == null || merchant.gcashNumber!.isEmpty;
       });
     }
@@ -75,14 +75,12 @@ class _PaymentsTransactionsScreenState
       return;
     }
 
-    // Validate form
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     final gcashNumber = _gcashNumberController.text.trim();
-    
-    // Validate that at least one (number or QR) is provided
+
     if (gcashNumber.isEmpty && _gcashQrImage == null && _currentQrUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -93,7 +91,6 @@ class _PaymentsTransactionsScreenState
       return;
     }
 
-    // Additional validation: if GCash number is provided, it must be valid
     if (gcashNumber.isNotEmpty) {
       if (gcashNumber.length != 11) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -119,13 +116,11 @@ class _PaymentsTransactionsScreenState
 
     try {
       String? qrUrl = _currentQrUrl;
-      
-      // Upload QR code if a new one is selected
+
       if (_gcashQrImage != null) {
         qrUrl = await MerchantService.uploadGCashQR(_gcashQrImage!);
       }
 
-      // Update GCash QR and/or number
       await MerchantService.updateGCashQR(
         merchantId: _merchantId!,
         qrUrl: qrUrl,
@@ -175,7 +170,7 @@ class _PaymentsTransactionsScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // GCash QR Code Section
+
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -196,7 +191,6 @@ class _PaymentsTransactionsScreenState
                     ),
                     const SizedBox(height: 24),
 
-                    // GCash Number Input with Edit/Save functionality
                     Form(
                       key: _formKey,
                       child: Column(
@@ -225,7 +219,7 @@ class _PaymentsTransactionsScreenState
                                   maxLength: 11,
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
-                                      return null; // Allow empty since QR code can be used instead
+                                      return null;
                                     }
                                     if (value.length != 11) {
                                       return 'GCash number must be exactly 11 digits';
@@ -243,14 +237,14 @@ class _PaymentsTransactionsScreenState
                                     LengthLimitingTextInputFormatter(11),
                                   ],
                                   onChanged: (value) {
-                                    // Auto-format: if user types a digit and it doesn't start with 0, prepend 0
+
                                     if (value.isNotEmpty && value.length == 1 && value != '0') {
                                       _gcashNumberController.value = TextEditingValue(
                                         text: '0$value',
                                         selection: TextSelection.collapsed(offset: 2),
                                       );
                                     }
-                                    // If user tries to remove the starting 0, prevent it
+
                                     if (value.isNotEmpty && !value.startsWith('0')) {
                                       _gcashNumberController.value = TextEditingValue(
                                         text: '0${value.substring(0, value.length > 10 ? 10 : value.length)}',
@@ -309,7 +303,6 @@ class _PaymentsTransactionsScreenState
                     ),
                     const SizedBox(height: 24),
 
-                    // GCash QR Code Section
                     const Text(
                       'GCash QR Code',
                       style: TextStyle(
@@ -324,27 +317,26 @@ class _PaymentsTransactionsScreenState
                     ),
                     const SizedBox(height: 16),
 
-                    // Current QR Code Display (clickable to view full screen)
                     if (_currentQrUrl != null) ...[
                       GestureDetector(
                         onTap: () => _showQRFullScreen(_currentQrUrl!),
                         child: Container(
-                          height: 200,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: AppColors.border),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                        height: 200,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.border),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                           child: Stack(
                             children: [
                               Image.network(
-                                _currentQrUrl!,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const Center(
-                                    child: Icon(Icons.error_outline, size: 48),
-                                  );
-                                },
+                          _currentQrUrl!,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Center(
+                              child: Icon(Icons.error_outline, size: 48),
+                            );
+                          },
                               ),
                               Positioned(
                                 bottom: 8,
@@ -378,7 +370,6 @@ class _PaymentsTransactionsScreenState
                       const SizedBox(height: 16),
                     ],
 
-                    // New QR Code Upload
                     if (_gcashQrImage == null)
                       InkWell(
                         onTap: () => _showImageSourceDialog(),
@@ -439,8 +430,7 @@ class _PaymentsTransactionsScreenState
                       ),
                     ],
                     const SizedBox(height: 24),
-                    
-                    // Save Button
+
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -469,7 +459,6 @@ class _PaymentsTransactionsScreenState
             ),
             const SizedBox(height: 24),
 
-            // Transactions Section (Future feature)
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -540,7 +529,6 @@ class _PaymentsTransactionsScreenState
     );
   }
 
-  // Show QR code in full screen
   void _showQRFullScreen(String qrUrl) {
     showDialog(
       context: context,
@@ -607,7 +595,6 @@ class _PaymentsTransactionsScreenState
     );
   }
 
-  // Save only GCash number (without QR code)
   Future<void> _saveGCashNumberOnly() async {
     if (_merchantId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -619,14 +606,12 @@ class _PaymentsTransactionsScreenState
       return;
     }
 
-    // Validate form
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     final gcashNumber = _gcashNumberController.text.trim();
-    
-    // Additional validation: if GCash number is provided, it must be valid
+
     if (gcashNumber.isNotEmpty) {
       if (gcashNumber.length != 11) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -651,10 +636,10 @@ class _PaymentsTransactionsScreenState
     setState(() => _isLoading = true);
 
     try {
-      // Update only GCash number (keep existing QR URL)
+
       await MerchantService.updateGCashQR(
         merchantId: _merchantId!,
-        qrUrl: _currentQrUrl, // Keep existing QR
+        qrUrl: _currentQrUrl,
         gcashNumber: gcashNumber.isNotEmpty ? gcashNumber : null,
       );
 
@@ -687,4 +672,3 @@ class _PaymentsTransactionsScreenState
     }
   }
 }
-

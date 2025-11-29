@@ -20,14 +20,29 @@ class PaymentReceipt {
   });
 
   factory PaymentReceipt.fromJson(Map<String, dynamic> json) {
+
+    final screenshotUrl = json['payment_proof_url'] as String? ?? 
+                          json['screenshot_url'] as String?;
+    final payerName = json['ewallet_name'] as String? ?? 
+                      json['payer_name'] as String? ?? 
+                      'Unknown';
+
+    final finalScreenshotUrl = (screenshotUrl != null && 
+                                 screenshotUrl != 'pending_upload' && 
+                                 screenshotUrl.isNotEmpty) 
+                                 ? screenshotUrl 
+                                 : null;
+
     return PaymentReceipt(
       id: json['id'] as String,
       deliveryId: json['delivery_id'] as String,
-      screenshotUrl: json['screenshot_url'] as String?,
-      referenceNumber: json['reference_number'] as String,
-      payerName: json['payer_name'] as String,
-      amount: (json['amount'] as num).toDouble(),
-      createdAt: DateTime.parse(json['created_at'] as String),
+      screenshotUrl: finalScreenshotUrl,
+      referenceNumber: json['reference_number'] as String? ?? '',
+      payerName: payerName,
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
       status: PaymentStatusExtension.fromString(
         json['status'] as String? ?? 'pending',
       ),
@@ -79,4 +94,3 @@ extension PaymentStatusExtension on PaymentStatus {
     }
   }
 }
-

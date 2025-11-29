@@ -106,7 +106,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
 
   Future<void> _showProductDialog({MerchantProduct? product}) async {
     final nameController = TextEditingController(text: product?.name ?? '');
-    // Format price without peso sign in controller, but show it in UI
+
     final priceValue = product?.price ?? 0.0;
     final priceController = TextEditingController(
       text: priceValue > 0 ? priceValue.toStringAsFixed(2) : '',
@@ -126,7 +126,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Image
+
                 GestureDetector(
                   onTap: () async {
                     final source = await showDialog<ImageSource>(
@@ -177,7 +177,6 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Name
                 TextField(
                   controller: nameController,
                   decoration: const InputDecoration(
@@ -187,7 +186,6 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Category
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
                   decoration: const InputDecoration(
@@ -202,7 +200,6 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Price
                 TextField(
                   controller: priceController,
                   decoration: InputDecoration(
@@ -223,7 +220,6 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Stock
                 TextField(
                   controller: stockController,
                   decoration: const InputDecoration(
@@ -240,7 +236,6 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Availability
                 CheckboxListTile(
                   title: const Text('Available'),
                   value: isAvailable,
@@ -257,7 +252,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                // Validation
+
                 if (nameController.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -293,7 +288,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
 
                 try {
                   final price = double.parse(priceController.text.trim());
-                  
+
                   if (product == null) {
                     await ProductService.addProduct(
                       name: nameController.text.trim(),
@@ -427,4 +422,3 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
     );
   }
 }
-

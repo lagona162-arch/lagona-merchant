@@ -7,7 +7,6 @@ import '../setup/setup_configuration_screen.dart';
 import '../menu/menu_management_screen.dart';
 import '../orders/order_management_screen.dart';
 import '../payments/payments_transactions_screen.dart';
-import '../riders/priority_rider_management_screen.dart';
 import '../auth/login_screen.dart';
 
 class MerchantDashboardScreen extends StatefulWidget {
@@ -21,7 +20,7 @@ class MerchantDashboardScreen extends StatefulWidget {
 class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
   Merchant? _merchant;
   bool _isLoading = true;
-  int _currentIndex = 2; // Start with Orders (index 2)
+  int _currentIndex = 2;
 
   @override
   void initState() {
@@ -30,11 +29,11 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
   }
 
   Future<void> _verifyRoleAndLoadData() async {
-    // First verify the user is a merchant
+
     final isMerchant = await SupabaseService.isMerchant();
-    
+
     if (!isMerchant) {
-      // User is not a merchant, sign them out and redirect
+
       await SupabaseService.signOut();
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
@@ -52,7 +51,6 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
       return;
     }
 
-    // If merchant, load merchant data
     await _loadMerchantData();
   }
 
@@ -61,15 +59,15 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
     if (userId != null) {
       final merchant = await MerchantService.getMerchantByUserId(userId);
       if (mounted) {
-        setState(() {
-          _merchant = merchant;
-          _isLoading = false;
-        });
+      setState(() {
+        _merchant = merchant;
+        _isLoading = false;
+      });
       }
     } else {
       if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() => _isLoading = false);
+    }
     }
   }
 
@@ -77,14 +75,12 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
     setState(() {
       _currentIndex = index;
     });
-    // Reload merchant data when returning to dashboard (Orders tab)
-    // This ensures the logo is updated if changed in Setup tab
+
     if (index == 2) {
       _loadMerchantData();
     }
   }
 
-  // Show logo in full screen
   void _showLogoFullScreen(String imageUrl) {
     showDialog(
       context: context,
@@ -195,43 +191,43 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Welcome Card - with gradient accent (includes business name and verified badge)
+
             Container(
               margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppColors.primary,
-                  AppColors.primary.withOpacity(0.8),
-                ],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.2),
-                  width: 1,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.primary,
+                    AppColors.primary.withOpacity(0.8),
+                  ],
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              child: Column(
-                children: [
-                  // Main content with logout
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Row(
-                      children: [
-                        // Logo or Icon with white background (clickable)
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  children: [
+
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Row(
+                        children: [
+
                         GestureDetector(
                           onTap: _merchant != null && 
                                  _merchant!.previewImage != null && 
@@ -285,39 +281,39 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                                     ),
                                   )
                                 : Icon(
-                                    Icons.store_outlined,
-                                    color: AppColors.primary,
-                                    size: 32,
+                               Icons.store_outlined,
+                               color: AppColors.primary,
+                               size: 32,
                                   ),
+                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        // Text with verified badge
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Welcome back!',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                          const SizedBox(width: 16),
+
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Welcome back!',
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
-                              ),
                               const SizedBox(height: 6),
                               Row(
                                 children: [
-                                  Text(
-                                    _merchant?.businessName ?? 'Merchant',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.white.withOpacity(0.9),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                Text(
+                                  _merchant?.businessName ?? 'Merchant',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white.withOpacity(0.9),
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                   if (_merchant != null && _merchant!.verified) ...[
                                     const SizedBox(width: 8),
                                     Container(
@@ -344,11 +340,11 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                                     ),
                                   ],
                                 ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        // Logout button - more subtle
+
                         InkWell(
                           onTap: _logout,
                           borderRadius: BorderRadius.circular(12),
@@ -367,51 +363,50 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                               color: Colors.white,
                               size: 20,
                             ),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Warning banner (only if unverified)
-                  if (_merchant != null && !_merchant!.verified)
-                    Container(
-                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 1,
-                        ),
+                        ],
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: Colors.white,
-                            size: 20,
+                    ),
+
+                    if (_merchant != null && !_merchant!.verified)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 1,
                           ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Text(
-                              'Your account is pending verification',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Your account is pending verification',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
                               ),
                             ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                ],
+                      ),
+                  ],
+                ),
               ),
             ),
-            ),
 
-            // Main content area - shows different screens based on selected tab
             Expanded(
               child: IndexedStack(
                 index: _currentIndex,
@@ -420,7 +415,6 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                   MenuManagementScreen(),
                   OrderManagementScreen(),
                   PaymentsTransactionsScreen(),
-                  PriorityRiderManagementScreen(),
                 ],
               ),
             ),
@@ -447,7 +441,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
             icon: Icon(Icons.restaurant_menu_outlined),
             activeIcon: Icon(Icons.restaurant_menu),
             label: 'Menu',
-          ),
+        ),
           BottomNavigationBarItem(
             icon: Icon(Icons.shopping_bag_outlined),
             activeIcon: Icon(Icons.shopping_bag),
@@ -457,11 +451,6 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
             icon: Icon(Icons.payment_outlined),
             activeIcon: Icon(Icons.payment),
             label: 'Payments',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.delivery_dining_outlined),
-            activeIcon: Icon(Icons.delivery_dining),
-            label: 'Riders',
           ),
         ],
       ),

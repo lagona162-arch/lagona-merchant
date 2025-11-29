@@ -86,4 +86,3 @@ class _MenuManagementScreenState extends State<MenuManagementScreen> {
     );
   }
 }
-

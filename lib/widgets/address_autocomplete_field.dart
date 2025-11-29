@@ -90,7 +90,6 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
       _showSuggestions = false;
     });
 
-    // Get place details
     final details = await GooglePlacesService.getPlaceDetails(prediction.placeId);
     if (details != null && widget.onPlaceSelected != null) {
       widget.onPlaceSelected!(details);
@@ -168,12 +167,12 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
   }
 
   Future<void> _openMapPicker(BuildContext context) async {
-    // Get current coordinates from controller if available
+
     double? initialLat;
     double? initialLng;
     String? initialAddress;
 
-    // Try to extract coordinates from current address if it's already selected
+
     if (widget.controller.text.isNotEmpty) {
       initialAddress = widget.controller.text;
     }
@@ -197,26 +196,23 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
         widget.controller.text = address;
       }
 
-      // Get place details for the selected location
       if (latitude != null && longitude != null) {
         PlaceDetails? placeDetails;
-        
-        // Try to get place details via reverse geocoding
+
         try {
           placeDetails = await GooglePlacesService.reverseGeocode(
             latitude,
             longitude,
           );
         } catch (e) {
-          // If reverse geocoding fails, create a PlaceDetails from the coordinates and address
+
           debugPrint('Reverse geocoding failed: $e');
         }
 
-        // If we have place details, use them; otherwise create from coordinates
         if (placeDetails != null && widget.onPlaceSelected != null) {
           widget.onPlaceSelected!(placeDetails);
         } else if (widget.onPlaceSelected != null) {
-          // Create a minimal PlaceDetails with just coordinates and address
+
           final fallbackDetails = PlaceDetails(
             formattedAddress: address ?? '',
             placeId: null,
@@ -289,4 +285,3 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
     );
   }
 }
-

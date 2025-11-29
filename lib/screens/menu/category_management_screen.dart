@@ -74,7 +74,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
 
   Future<void> _editCategory(String oldCategory, String newCategory) async {
     if (oldCategory.trim() == newCategory.trim()) {
-      // No change, just clear editing state
+
       setState(() {
         _editingCategory = null;
         _categoryController.clear();
@@ -177,7 +177,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
       ),
       body: Column(
         children: [
-          // Add/Edit Category Section
+
           Container(
             color: _editingCategory != null 
                 ? AppColors.primary.withOpacity(0.1)
@@ -215,16 +215,16 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                   const SizedBox(height: 12),
                 ],
                 Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _categoryController,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _categoryController,
                         autofocus: _editingCategory != null,
-                        decoration: InputDecoration(
+                    decoration: InputDecoration(
                           labelText: _editingCategory != null 
                               ? 'New Category Name' 
                               : 'Category Name',
-                          border: const OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                           hintText: 'e.g., Beverages, Food, Desserts',
                           prefixIcon: const Icon(Icons.category_outlined),
                           suffixIcon: _categoryController.text.isNotEmpty
@@ -236,28 +236,28 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                                   },
                                 )
                               : null,
-                        ),
+                    ),
                         onChanged: (value) => setState(() {}),
                         textCapitalization: TextCapitalization.words,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
+                  ),
+                ),
+                const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: _categoryController.text.trim().isEmpty
                           ? null
                           : () {
                               if (_editingCategory != null) {
-                                _editCategory(
-                                  _editingCategory!,
-                                  _categoryController.text.trim(),
-                                );
+                            _editCategory(
+                              _editingCategory!,
+                              _categoryController.text.trim(),
+                            );
                               } else {
                                 _addCategory();
-                              }
+                          }
                             },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20,
                           vertical: 16,
@@ -275,7 +275,6 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
           ),
           const Divider(),
 
-          // Categories List
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -315,4 +314,3 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     );
   }
 }
-

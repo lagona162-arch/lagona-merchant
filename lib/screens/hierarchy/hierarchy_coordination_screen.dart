@@ -53,4 +53,3 @@ class HierarchyCoordinationScreen extends StatelessWidget {
     );
   }
 }
-
