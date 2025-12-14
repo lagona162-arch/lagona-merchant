@@ -68,34 +68,33 @@ class OrderService {
               stock,
               image_url,
               created_at
+          ),
+          delivery_item_addons (
+            id,
+            delivery_item_id,
+            addon_id,
+            name,
+            price,
+            quantity,
+            subtotal,
+            created_at
           )
         ''')
         .eq('delivery_id', deliveryId);
 
+    debugPrint('getOrderItems response: $response');
+    
     return response.map((json) {
-        Map<String, dynamic>? productJson;
-        final merchantProducts = json['merchant_products'];
-
-        if (merchantProducts != null) {
-          if (merchantProducts is Map<String, dynamic>) {
-            productJson = merchantProducts;
-          } else if (merchantProducts is List && merchantProducts.isNotEmpty) {
-            productJson = merchantProducts.first as Map<String, dynamic>?;
-          }
-        }
-
+        // Use DeliveryItem.fromJson to properly parse addons
         try {
-      return DeliveryItem(
-            id: json['id'] as String? ?? '',
-            deliveryId: json['delivery_id'] as String? ?? '',
-            productId: json['product_id'] as String? ?? '',
-        quantity: json['quantity'] as int? ?? 1,
-            subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
-        product: productJson != null
-            ? MerchantProduct.fromJson(productJson)
-            : null,
-      );
+          debugPrint('Parsing DeliveryItem JSON: $json');
+          debugPrint('Addons in JSON: ${json['delivery_item_addons']}');
+          final item = DeliveryItem.fromJson(json);
+          debugPrint('Parsed item addons count: ${item.addons.length}');
+          return item;
         } catch (e) {
+          debugPrint('Error parsing DeliveryItem: $e');
+          debugPrint('JSON: $json');
           rethrow;
         }
     }).toList();

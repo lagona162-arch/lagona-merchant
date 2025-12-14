@@ -241,6 +241,54 @@ class Delivery {
   }
 }
 
+class DeliveryItemAddon {
+  final String id;
+  final String deliveryItemId;
+  final String addonId;
+  final String name;
+  final double price;
+  final int quantity;
+  final double subtotal;
+  final DateTime createdAt;
+
+  DeliveryItemAddon({
+    required this.id,
+    required this.deliveryItemId,
+    required this.addonId,
+    required this.name,
+    required this.price,
+    required this.quantity,
+    required this.subtotal,
+    required this.createdAt,
+  });
+
+  factory DeliveryItemAddon.fromJson(Map<String, dynamic> json) {
+    return DeliveryItemAddon(
+      id: json['id'] as String,
+      deliveryItemId: json['delivery_item_id'] as String,
+      addonId: json['addon_id'] as String,
+      name: json['name'] as String,
+      price: (json['price'] as num).toDouble(),
+      quantity: json['quantity'] as int? ?? 1,
+      subtotal: (json['subtotal'] as num).toDouble(),
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'delivery_item_id': deliveryItemId,
+      'addon_id': addonId,
+      'name': name,
+      'price': price,
+      'quantity': quantity,
+      'subtotal': subtotal,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+}
+
 class DeliveryItem {
   final String id;
   final String deliveryId;
@@ -248,6 +296,7 @@ class DeliveryItem {
   final int quantity;
   final double subtotal;
   final MerchantProduct? product;
+  final List<DeliveryItemAddon> addons;
 
   DeliveryItem({
     required this.id,
@@ -256,6 +305,7 @@ class DeliveryItem {
     this.quantity = 1,
     required this.subtotal,
     this.product,
+    this.addons = const [],
   });
 
   factory DeliveryItem.fromJson(Map<String, dynamic> json) {
@@ -271,6 +321,37 @@ class DeliveryItem {
           : null;
     }
 
+    // Parse addons - handle different Supabase response formats
+    List<DeliveryItemAddon> addonsList = [];
+    final addonsData = json['delivery_item_addons'];
+    if (addonsData != null) {
+      if (addonsData is List) {
+        // Supabase returns nested relations as arrays
+        addonsList = (addonsData as List)
+            .where((addonJson) => addonJson != null)
+            .map((addonJson) {
+              try {
+                if (addonJson is Map<String, dynamic>) {
+                  return DeliveryItemAddon.fromJson(addonJson);
+                }
+                return null;
+              } catch (e) {
+                // Silently skip invalid addon entries
+                return null;
+              }
+            })
+            .whereType<DeliveryItemAddon>()
+            .toList();
+      } else if (addonsData is Map<String, dynamic>) {
+        // Handle case where it might be a single object (unlikely but possible)
+        try {
+          addonsList = [DeliveryItemAddon.fromJson(addonsData)];
+        } catch (e) {
+          // Silently skip if parsing fails
+        }
+      }
+    }
+
     return DeliveryItem(
       id: json['id'] as String,
       deliveryId: json['delivery_id'] as String,
@@ -280,6 +361,7 @@ class DeliveryItem {
       product: productJson != null
           ? MerchantProduct.fromJson(productJson)
           : null,
+      addons: addonsList,
     );
   }
 
@@ -290,6 +372,7 @@ class DeliveryItem {
       'product_id': productId,
       'quantity': quantity,
       'subtotal': subtotal,
+      'addons': addons.map((addon) => addon.toJson()).toList(),
     };
   }
 }

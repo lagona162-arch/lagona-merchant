@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/colors.dart';
@@ -271,7 +272,12 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
     final items = _orderItems[orderId] ?? [];
     double total = 0;
     for (var item in items) {
+      // Add item subtotal
       total += item.subtotal;
+      // Add addon subtotals
+      for (var addon in item.addons) {
+        total += addon.subtotal;
+      }
     }
     final order = _orders.firstWhere((o) => o.id == orderId);
     if (order.deliveryFee != null) {
@@ -817,14 +823,23 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                       labelText: 'Rider GCash/E-wallet Number *',
                       hintText: '09XXXXXXXXX',
                       border: OutlineInputBorder(),
+                      helperText: '11 digits starting with 09',
                     ),
                     keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(11),
+                    ],
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         return 'Please enter rider GCash number';
                       }
-                      if (value.trim().length < 10 || value.trim().length > 11) {
-                        return 'Please enter a valid phone number';
+                      final trimmed = value.trim();
+                      if (trimmed.length != 11) {
+                        return 'GCash number must be exactly 11 digits';
+                      }
+                      if (!trimmed.startsWith('09')) {
+                        return 'GCash number must start with 09';
                       }
                       return null;
                     },
@@ -1201,22 +1216,56 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                           color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(
-                                '${item.product?.name ?? "Product ${item.productId}"} x${item.quantity}',
-                                style: const TextStyle(fontWeight: FontWeight.w500),
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${item.product?.name ?? "Product ${item.productId}"} x${item.quantity}',
+                                    style: const TextStyle(fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                                Text(
+                                  '₱${item.subtotal.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '₱${item.subtotal.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
-                              ),
-              ),
+                            if (item.addons.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              ...item.addons.map((addon) => Padding(
+                                    padding: const EdgeInsets.only(left: 16, top: 4),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            '  + ${addon.name} x${addon.quantity}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          '₱${addon.subtotal.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )),
+                            ],
                           ],
                         ),
                       ),
