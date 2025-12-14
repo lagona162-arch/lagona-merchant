@@ -35,7 +35,6 @@ class OrderService {
 
       return user;
     } catch (e) {
-      debugPrint('Error fetching customer info: $e');
       return null;
     }
   }
@@ -73,10 +72,7 @@ class OrderService {
         ''')
         .eq('delivery_id', deliveryId);
 
-      debugPrint('Fetched ${response.length} delivery items for delivery $deliveryId');
-
     return response.map((json) {
-
         Map<String, dynamic>? productJson;
         final merchantProducts = json['merchant_products'];
 
@@ -87,8 +83,6 @@ class OrderService {
             productJson = merchantProducts.first as Map<String, dynamic>?;
           }
         }
-
-        debugPrint('Delivery item ${json['id']}: product_id=${json['product_id']}, has_product=${productJson != null}');
 
         try {
       return DeliveryItem(
@@ -102,13 +96,10 @@ class OrderService {
             : null,
       );
         } catch (e) {
-          debugPrint('Error parsing delivery item ${json['id']}: $e');
-          debugPrint('JSON: $json');
           rethrow;
         }
     }).toList();
     } catch (e) {
-      debugPrint('Error fetching order items: $e');
       rethrow;
     }
   }

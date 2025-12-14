@@ -6,7 +6,6 @@ import '../../models/merchant.dart';
 import '../setup/setup_configuration_screen.dart';
 import '../menu/menu_management_screen.dart';
 import '../orders/order_management_screen.dart';
-import '../payments/payments_transactions_screen.dart';
 import '../auth/login_screen.dart';
 
 class MerchantDashboardScreen extends StatefulWidget {
@@ -20,7 +19,7 @@ class MerchantDashboardScreen extends StatefulWidget {
 class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
   Merchant? _merchant;
   bool _isLoading = true;
-  int _currentIndex = 2;
+  int _currentIndex = 0;
 
   @override
   void initState() {
@@ -294,7 +293,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'Welcome back!',
+                                  'Welcome',
                                   style: TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
@@ -411,10 +410,9 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
               child: IndexedStack(
                 index: _currentIndex,
                 children: const [
-                  SetupConfigurationScreen(),
-                  MenuManagementScreen(),
                   OrderManagementScreen(),
-                  PaymentsTransactionsScreen(),
+                  MenuManagementScreen(),
+                  SetupConfigurationScreen(),
                 ],
               ),
             ),
@@ -433,24 +431,19 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
         elevation: 8,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: 'Setup',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.restaurant_menu_outlined),
-            activeIcon: Icon(Icons.restaurant_menu),
-            label: 'Menu',
-        ),
-          BottomNavigationBarItem(
             icon: Icon(Icons.shopping_bag_outlined),
             activeIcon: Icon(Icons.shopping_bag),
             label: 'Orders',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.payment_outlined),
-            activeIcon: Icon(Icons.payment),
-            label: 'Payments',
+            icon: Icon(Icons.restaurant_menu_outlined),
+            activeIcon: Icon(Icons.restaurant_menu),
+            label: 'Menu',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            activeIcon: Icon(Icons.settings),
+            label: 'Setup',
           ),
         ],
       ),

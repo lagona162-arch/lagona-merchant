@@ -33,7 +33,6 @@ class _MerchantRegistrationScreenState
 
   File? _dtiCertificate;
   File? _mayorPermit;
-  String? _selectedDocumentType;
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -45,13 +44,13 @@ class _MerchantRegistrationScreenState
   bool _municipalityAutoFilled = false;
   String? _lastAutoFilledMunicipality;
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickImage(ImageSource source, String documentType) async {
     final XFile? image = await _picker.pickImage(source: source);
     if (image != null) {
       setState(() {
-        if (_selectedDocumentType == 'dti') {
+        if (documentType == 'dti') {
           _dtiCertificate = File(image.path);
-        } else if (_selectedDocumentType == 'mayor_permit') {
+        } else if (documentType == 'mayor_permit') {
           _mayorPermit = File(image.path);
         }
       });
@@ -97,6 +96,19 @@ class _MerchantRegistrationScreenState
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Please select an address from the suggestions'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      if (_dtiCertificate == null && _mayorPermit == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please upload at least one business document (DTI Certificate or Mayor\'s Permit)'),
               backgroundColor: AppColors.error,
             ),
           );
@@ -486,7 +498,7 @@ class _MerchantRegistrationScreenState
                 _buildSectionCard(
                   icon: Icons.upload_file_outlined,
                   title: 'Business Documents',
-                  subtitle: '(Optional)',
+                  subtitle: '(Required - at least one)',
                   color: AppColors.primary,
                   children: [
                     Container(
@@ -516,12 +528,26 @@ class _MerchantRegistrationScreenState
                                   height: 1.5,
                                 ),
                                 children: [
+                                  TextSpan(
+                                    text: 'Required: Upload ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.error,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text: 'AT LEAST ONE ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
                                   const TextSpan(
-                                    text: 'Choose ',
+                                    text: 'document. You can upload ',
                                     style: TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                   TextSpan(
-                                    text: 'EITHER ',
+                                    text: 'BOTH ',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: AppColors.primary,
@@ -529,11 +555,11 @@ class _MerchantRegistrationScreenState
                                   ),
                                   const TextSpan(text: 'DTI Certificate '),
                                   const TextSpan(
-                                    text: 'OR ',
+                                    text: 'AND ',
                                     style: TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                   const TextSpan(
-                                    text: 'Mayor\'s Permit to upload.',
+                                    text: 'Mayor\'s Permit, or either one of them.',
                                   ),
                                 ],
                               ),
@@ -544,37 +570,17 @@ class _MerchantRegistrationScreenState
                     ),
                     const SizedBox(height: 20),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildDocumentTypeChoice(
-                            'DTI Certificate',
-                            'dti',
-                            Icons.description_outlined,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildDocumentTypeChoice(
-                            'Mayor\'s Permit',
-                            'mayor_permit',
-                            Icons.assignment_outlined,
-                          ),
-                        ),
-                      ],
+                    _buildDocumentPicker(
+                      'DTI Certificate',
+                      _dtiCertificate,
+                      'dti',
                     ),
-
-                    if (_selectedDocumentType != null) ...[
-                      const SizedBox(height: 20),
-                      _buildDocumentPicker(
-                        _selectedDocumentType == 'dti'
-                            ? 'DTI Certificate'
-                            : 'Mayor\'s Permit',
-                        _selectedDocumentType == 'dti'
-                            ? _dtiCertificate
-                            : _mayorPermit,
-                      ),
-                    ],
+                    const SizedBox(height: 20),
+                    _buildDocumentPicker(
+                      'Mayor\'s Permit',
+                      _mayorPermit,
+                      'mayor_permit',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 32),
@@ -928,85 +934,10 @@ class _MerchantRegistrationScreenState
     );
   }
 
-  Widget _buildDocumentTypeChoice(
-    String label,
-    String value,
-    IconData icon,
-  ) {
-    final isSelected = _selectedDocumentType == value;
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _selectedDocumentType = value;
-
-          if (value == 'dti') {
-            _mayorPermit = null;
-          } else {
-            _dtiCertificate = null;
-          }
-        });
-      },
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withOpacity(0.1)
-              : Colors.white,
-          border: Border.all(
-            color: isSelected
-                ? AppColors.primary
-                : AppColors.border,
-            width: isSelected ? 2 : 1,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.primary.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                color: isSelected ? Colors.white : AppColors.primary,
-                size: 24,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.textPrimary,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildDocumentPicker(
     String label,
     File? file,
+    String documentType,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1021,7 +952,7 @@ class _MerchantRegistrationScreenState
         ),
         const SizedBox(height: 12),
         InkWell(
-          onTap: () => _showImageSourceDialog(),
+          onTap: () => _showImageSourceDialog(documentType),
           borderRadius: BorderRadius.circular(12),
           child: Container(
             height: 140,
@@ -1096,7 +1027,7 @@ class _MerchantRegistrationScreenState
                             icon: const Icon(Icons.close_outlined, color: Colors.white),
                             onPressed: () {
                               setState(() {
-                                if (_selectedDocumentType == 'dti') {
+                                if (documentType == 'dti') {
                                   _dtiCertificate = null;
                                 } else {
                                   _mayorPermit = null;
@@ -1114,7 +1045,7 @@ class _MerchantRegistrationScreenState
     );
   }
 
-  void _showImageSourceDialog() {
+  void _showImageSourceDialog(String documentType) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1127,7 +1058,7 @@ class _MerchantRegistrationScreenState
                               title: const Text('Camera'),
                               onTap: () {
                                 Navigator.pop(context);
-                                _pickImage(ImageSource.camera);
+                                _pickImage(ImageSource.camera, documentType);
                               },
                             ),
                             ListTile(
@@ -1135,7 +1066,7 @@ class _MerchantRegistrationScreenState
                               title: const Text('Gallery'),
                               onTap: () {
                                 Navigator.pop(context);
-                                _pickImage(ImageSource.gallery);
+                                _pickImage(ImageSource.gallery, documentType);
                               },
                             ),
           ],

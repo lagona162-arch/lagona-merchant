@@ -115,7 +115,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
         TextEditingController(text: product?.stock.toString() ?? '0');
     String? selectedCategory = product?.category;
     File? imageFile;
-    bool isAvailable = product?.stock != null && product!.stock > 0;
+    bool isAvailable = product?.isAvailable ?? true;
 
     await showDialog(
       context: context,
@@ -295,6 +295,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                       category: selectedCategory,
                       price: price,
                       stock: stockValue,
+                      isAvailable: isAvailable,
                       imageFile: imageFile,
                     );
                   } else {
@@ -304,6 +305,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                       category: selectedCategory,
                       price: price,
                       stock: stockValue,
+                      isAvailable: isAvailable,
                       imageFile: imageFile,
                     );
                   }
@@ -331,6 +333,300 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                 }
               },
               child: Text(product == null ? 'Add' : 'Update'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _manageAddons(MerchantProduct product) async {
+    List<ProductAddon> addons = await ProductService.getProductAddons(product.id);
+    
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Manage Add-ons: ${product.name}'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: addons.length,
+                  itemBuilder: (context, index) {
+                    final addon = addons[index];
+                    return ListTile(
+                      title: Text(addon.name),
+                      subtitle: Text('₱${addon.price.toStringAsFixed(2)} - Stock: ${addon.stock}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            onPressed: () async {
+                              await _showAddonDialog(
+                                productId: product.id,
+                                addon: addon,
+                                onSave: () async {
+                                  final updatedAddons = await ProductService.getProductAddons(product.id);
+                                  setDialogState(() {
+                                    addons = updatedAddons;
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 20),
+                            color: AppColors.error,
+                            onPressed: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Delete Add-on'),
+                                  content: Text('Are you sure you want to delete "${addon.name}"?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              
+                              if (confirmed == true) {
+                                try {
+                                  await ProductService.deleteProductAddon(addon.id);
+                                  final updatedAddons = await ProductService.getProductAddons(product.id);
+                                  setDialogState(() {
+                                    addons = updatedAddons;
+                                  });
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Add-on deleted successfully'),
+                                        backgroundColor: AppColors.success,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Failed to delete add-on: ${e.toString()}'),
+                                        backgroundColor: AppColors.error,
+                                      ),
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                if (addons.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('No add-ons yet. Add one below.'),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                await _showAddonDialog(
+                  productId: product.id,
+                  onSave: () async {
+                    final updatedAddons = await ProductService.getProductAddons(product.id);
+                    setDialogState(() {
+                      addons = updatedAddons;
+                    });
+                  },
+                );
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Add Add-on'),
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    await _loadData();
+  }
+
+  Future<void> _showAddonDialog({
+    required String productId,
+    ProductAddon? addon,
+    required VoidCallback onSave,
+  }) async {
+    final nameController = TextEditingController(text: addon?.name ?? '');
+    final priceController = TextEditingController(
+      text: addon != null ? addon.price.toStringAsFixed(2) : '',
+    );
+    final stockController = TextEditingController(
+      text: addon?.stock.toString() ?? '0',
+    );
+    bool isAvailable = addon?.isAvailable ?? true;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(addon == null ? 'Add Add-on' : 'Edit Add-on'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Add-on Name (e.g., Ketchup, Gravy, Rice)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: priceController,
+                  decoration: InputDecoration(
+                    labelText: 'Price',
+                    hintText: '0.00',
+                    border: const OutlineInputBorder(),
+                    prefixText: '₱',
+                    prefixStyle: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                    ),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: stockController,
+                  decoration: const InputDecoration(
+                    labelText: 'Stock',
+                    hintText: '0',
+                    border: OutlineInputBorder(),
+                    suffixText: 'units',
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(10),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                CheckboxListTile(
+                  title: const Text('Available'),
+                  value: isAvailable,
+                  onChanged: (value) =>
+                      setDialogState(() => isAvailable = value ?? false),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter an add-on name'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                  return;
+                }
+
+                final priceValue = double.tryParse(priceController.text.trim());
+                if (priceValue == null || priceValue < 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid price (0 or greater)'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                  return;
+                }
+
+                final stockValue = int.tryParse(stockController.text.trim()) ?? 0;
+                if (stockValue < 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Stock cannot be negative'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                  return;
+                }
+
+                try {
+                  if (addon == null) {
+                    await ProductService.addProductAddon(
+                      productId: productId,
+                      name: nameController.text.trim(),
+                      price: priceValue,
+                      stock: stockValue,
+                      isAvailable: isAvailable,
+                    );
+                  } else {
+                    await ProductService.updateProductAddon(
+                      addonId: addon.id,
+                      name: nameController.text.trim(),
+                      price: priceValue,
+                      stock: stockValue,
+                      isAvailable: isAvailable,
+                    );
+                  }
+                  
+                  if (mounted) {
+                    Navigator.pop(context);
+                    onSave();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(addon == null
+                            ? 'Add-on added successfully'
+                            : 'Add-on updated successfully'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: ${e.toString()}'),
+                        backgroundColor: AppColors.error,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: Text(addon == null ? 'Add' : 'Update'),
             ),
           ],
         ),
@@ -394,11 +690,24 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                                     : AppColors.error,
                               ),
                             ),
+                            if (product.addons.isNotEmpty)
+                              Text(
+                                'Add-ons: ${product.addons.length}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
                           ],
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            IconButton(
+                              icon: const Icon(Icons.add_box_outlined),
+                              tooltip: 'Manage Add-ons',
+                              onPressed: () => _manageAddons(product),
+                            ),
                             IconButton(
                               icon: const Icon(Icons.edit_outlined),
                               onPressed: () => _editProduct(product),

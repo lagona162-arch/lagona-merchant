@@ -95,12 +95,23 @@ class ProductService {
 
     final response = await SupabaseService.client
         .from('merchant_products')
-        .select()
+        .select('''
+          *,
+          product_addons(*)
+        ''')
         .eq('merchant_id', merchantId)
         .not('name', 'like', '_CATEGORY_PLACEHOLDER_%')
         .order('created_at', ascending: false);
 
-    return response.map((json) => MerchantProduct.fromJson(json)).toList();
+    return response.map((json) {
+      final productJson = Map<String, dynamic>.from(json);
+      if (json['product_addons'] != null) {
+        productJson['addons'] = json['product_addons'];
+      } else {
+        productJson['addons'] = <dynamic>[];
+      }
+      return MerchantProduct.fromJson(productJson);
+    }).toList();
   }
 
   static Future<void> addProduct({
@@ -108,6 +119,7 @@ class ProductService {
     String? category,
     required double price,
     int stock = 0,
+    bool isAvailable = true,
     File? imageFile,
   }) async {
     final merchantId = await _getMerchantId();
@@ -124,6 +136,7 @@ class ProductService {
       'category': category,
       'price': price,
       'stock': stock,
+      'is_available': isAvailable,
       if (imageUrl != null) 'image_url': imageUrl,
     });
   }
@@ -134,6 +147,7 @@ class ProductService {
     String? category,
     required double price,
     required int stock,
+    required bool isAvailable,
     File? imageFile,
   }) async {
     final updateData = <String, dynamic>{
@@ -141,6 +155,7 @@ class ProductService {
       'category': category,
       'price': price,
       'stock': stock,
+      'is_available': isAvailable,
     };
 
     if (imageFile != null) {
@@ -205,5 +220,79 @@ class ProductService {
         .getPublicUrl(filePath);
 
     return publicUrl;
+  }
+
+  static Future<List<ProductAddon>> getProductAddons(String productId) async {
+    try {
+      final response = await SupabaseService.client
+          .from('product_addons')
+          .select()
+          .eq('product_id', productId)
+          .order('created_at', ascending: true);
+
+      return response.map((json) => ProductAddon.fromJson(json)).toList();
+    } catch (e) {
+      debugPrint('Error fetching product add-ons: $e');
+      return [];
+    }
+  }
+
+  static Future<void> addProductAddon({
+    required String productId,
+    required String name,
+    required double price,
+    int stock = 0,
+    bool isAvailable = true,
+  }) async {
+    try {
+      await SupabaseService.client.from('product_addons').insert({
+        'product_id': productId,
+        'name': name,
+        'price': price,
+        'stock': stock,
+        'is_available': isAvailable,
+      });
+      debugPrint('Add-on added successfully: $name');
+    } catch (e) {
+      debugPrint('Error adding product add-on: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> updateProductAddon({
+    required String addonId,
+    required String name,
+    required double price,
+    required int stock,
+    required bool isAvailable,
+  }) async {
+    try {
+      await SupabaseService.client
+          .from('product_addons')
+          .update({
+            'name': name,
+            'price': price,
+            'stock': stock,
+            'is_available': isAvailable,
+          })
+          .eq('id', addonId);
+      debugPrint('Add-on updated successfully: $name');
+    } catch (e) {
+      debugPrint('Error updating product add-on: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> deleteProductAddon(String addonId) async {
+    try {
+      await SupabaseService.client
+          .from('product_addons')
+          .delete()
+          .eq('id', addonId);
+      debugPrint('Add-on deleted successfully');
+    } catch (e) {
+      debugPrint('Error deleting product add-on: $e');
+      rethrow;
+    }
   }
 }

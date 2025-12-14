@@ -43,9 +43,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
     _tabController.addListener(() {
 
       if (_tabController.indexIsChanging || _tabController.index != _tabController.previousIndex) {
-        setState(() {
-          debugPrint('Tab changed to index: ${_tabController.index}');
-        });
+        setState(() {});
 
         if (_tabController.index == 1 && _orders.isNotEmpty) {
           _reloadPaymentReceipts();
@@ -111,13 +109,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
             .from('payments')
             .stream(primaryKey: ['id'])
             .listen((data) {
-          debugPrint('Payment receipt realtime event received: ${data.length} records');
-          for (var record in data) {
-            debugPrint('  - Receipt ID: ${record['id']}, Delivery ID: ${record['delivery_id']}, Status: ${record['status']}');
-          }
           if (mounted) {
-
-            debugPrint('Triggering payment receipts reload from realtime event');
             _reloadPaymentReceipts();
           }
         });
@@ -127,35 +119,20 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
 
   Future<void> _reloadPaymentReceipts() async {
     if (!mounted || _orders.isEmpty) {
-      debugPrint('_reloadPaymentReceipts: Skipping - mounted: $mounted, orders count: ${_orders.length}');
       return;
     }
 
     try {
       final deliveryIds = _orders.map((o) => o.id).toList();
-      debugPrint('_reloadPaymentReceipts: Reloading receipts for ${deliveryIds.length} orders');
-      debugPrint('_reloadPaymentReceipts: Delivery IDs: ${deliveryIds.map((id) => id.substring(0, 6)).join(", ")}');
-
       final receiptsMap = await PaymentService.getPaymentReceipts(deliveryIds);
-
-      debugPrint('_reloadPaymentReceipts: Received ${receiptsMap.length} receipts');
-      for (var entry in receiptsMap.entries) {
-        if (entry.value != null) {
-          debugPrint('  - Delivery ${entry.key.substring(0, 6)}: Receipt found (ID: ${entry.value!.id.substring(0, 6)}, Status: ${entry.value!.status.value})');
-        } else {
-          debugPrint('  - Delivery ${entry.key.substring(0, 6)}: No receipt');
-        }
-      }
 
       if (mounted) {
         setState(() {
           _paymentReceipts = receiptsMap;
         });
-        debugPrint('_reloadPaymentReceipts: Payment receipts updated in state');
       }
     } catch (e) {
-      debugPrint('Error reloading payment receipts: $e');
-      debugPrint('Stack trace: ${StackTrace.current}');
+      // Error reloading payment receipts
     }
   }
 
@@ -193,20 +170,11 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
           itemsMap[order.id] = items;
         } catch (e) {
 
-          debugPrint('Error loading details for order ${order.id}: $e');
         }
       }
 
       if (!mounted) return;
 
-      debugPrint('_loadOrders: Loaded ${receiptsMap.length} payment receipts');
-      final receiptsWithData = receiptsMap.entries.where((e) => e.value != null).length;
-      debugPrint('_loadOrders: ${receiptsWithData} receipts have data');
-      for (var entry in receiptsMap.entries) {
-        if (entry.value != null) {
-          debugPrint('  - Order ${entry.key.substring(0, 6)}: Receipt ID ${entry.value!.id.substring(0, 6)}, Status: ${entry.value!.status.value}');
-        }
-      }
 
       setState(() {
         _orders = orders;
@@ -247,7 +215,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         });
       }
     } catch (e) {
-      debugPrint('Error loading order details for $orderId: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -275,11 +242,9 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                 o.riderId != null)
             .toList();
 
-        debugPrint('To Approve tab filter - Total orders: ${_orders.length}, Filtered: ${filtered.length}');
         for (var o in _orders) {
           final matches = o.status == DeliveryStatus.waitingForPayment && o.riderId != null;
           if (matches || o.status.value == 'accepted') {
-            debugPrint('  Order ${o.id.substring(0, 6)}: enum=${o.status}, value=${o.status.value}, rider=${o.riderId != null}, matches=$matches');
           }
         }
 
@@ -360,7 +325,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
             final currentOrder = _orders.firstWhere((o) => o.id == orderId);
             final shouldUpdateStatus = currentOrder.status == DeliveryStatus.pending;
 
-            debugPrint('Assigning rider $rider.id to order $orderId, current status: ${currentOrder.status.value}, should update: $shouldUpdateStatus');
 
             await RiderService.assignRiderToDelivery(
               deliveryId: orderId,
@@ -368,7 +332,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
               status: shouldUpdateStatus ? DeliveryStatus.accepted.value : null,
             );
 
-            debugPrint('Rider assignment completed for order $orderId');
             assignedRiderId = rider.id;
             break;
           }
@@ -390,7 +353,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
             final currentOrder = _orders.firstWhere((o) => o.id == orderId);
             final shouldUpdateStatus = currentOrder.status == DeliveryStatus.pending;
 
-            debugPrint('Assigning rider ${rider.id} to order $orderId, current status: ${currentOrder.status.value}, should update: $shouldUpdateStatus');
 
             await RiderService.assignRiderToDelivery(
               deliveryId: orderId,
@@ -398,7 +360,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
               status: shouldUpdateStatus ? DeliveryStatus.accepted.value : null,
             );
 
-            debugPrint('Rider assignment completed for order $orderId');
             assignedRiderId = rider.id;
           }
         }
@@ -411,7 +372,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
           try {
             Navigator.of(context, rootNavigator: true).pop();
           } catch (e) {
-            debugPrint('Error closing dialog: $e');
 
             if (mounted) {
               Navigator.pop(context);
@@ -424,7 +384,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
 
 
 
-        debugPrint('Rider $assignedRiderId assigned to order $orderId');
 
         await _loadRiderInfo(assignedRiderId);
 
@@ -436,16 +395,9 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
       if (mounted) {
             try {
               final updatedOrder = _orders.firstWhere((o) => o.id == orderId);
-              debugPrint('Order $orderId after reload - status enum: ${updatedOrder.status}, status value: ${updatedOrder.status.value}, rider_id: ${updatedOrder.riderId}');
-              debugPrint('Is waitingForPayment enum? ${updatedOrder.status == DeliveryStatus.waitingForPayment}');
-              debugPrint('Has rider? ${updatedOrder.riderId != null}');
-              debugPrint('Should appear in To Approve tab: ${updatedOrder.status == DeliveryStatus.waitingForPayment && updatedOrder.riderId != null}');
-
-              debugPrint('Total orders: ${_orders.length}');
               for (var o in _orders) {
                 final isWaitingForPayment = o.status == DeliveryStatus.waitingForPayment;
                 final hasRider = o.riderId != null;
-                debugPrint('  Order ${o.id.substring(0, 6)}: enum=${o.status}, value=${o.status.value}, rider=${o.riderId != null ? o.riderId!.substring(0, 6) : "null"}, matches filter: ${isWaitingForPayment && hasRider}');
               }
 
               final toApproveOrders = _orders
@@ -453,17 +405,10 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                       o.status == DeliveryStatus.waitingForPayment && 
                       o.riderId != null)
                   .toList();
-              debugPrint('To Approve tab filtered orders: ${toApproveOrders.length}');
-              for (var o in toApproveOrders) {
-                debugPrint('  To Approve order: ${o.id.substring(0, 6)}');
-              }
             } catch (e) {
-              debugPrint('Order $orderId not found after reload: $e');
-              debugPrint('Available order IDs: ${_orders.map((o) => o.id.substring(0, 6)).join(", ")}');
             }
           }
         } catch (e) {
-          debugPrint('Error in reload: $e');
 
           rethrow;
         }
@@ -489,7 +434,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         }
       }
     } catch (e) {
-      debugPrint('Error in _findAndAssignRider: $e');
       if (mounted) {
 
         try {
@@ -534,13 +478,8 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
           _orders = orders;
         });
 
-        debugPrint('Orders reloaded - Total: ${orders.length}');
-        debugPrint('  Pending: ${orders.where((o) => o.status == DeliveryStatus.pending && o.riderId == null).length}');
-        debugPrint('  Accepted (To Approve): ${orders.where((o) => o.status == DeliveryStatus.waitingForPayment && o.riderId != null).length}');
-        debugPrint('  Payment Received (To Out): ${orders.where((o) => o.status == DeliveryStatus.paymentReceived).length}');
       }
     } catch (e) {
-      debugPrint('Error silently reloading orders: $e');
 
 
     }
@@ -556,7 +495,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
       try {
         await _silentReloadOrders();
       } catch (e) {
-        debugPrint('Error in silent reload: $e');
+        // Error in silent reload
       }
 
       if (mounted) {
@@ -607,10 +546,8 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
             'read': false,
             'created_at': DateTime.now().toIso8601String(),
           });
-          debugPrint('Notification created for buyer ${order.customerId}');
         }
       } catch (e) {
-        debugPrint('Warning: Failed to create notification for buyer: $e');
       }
 
       try {
@@ -624,16 +561,14 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
             'read': false,
             'created_at': DateTime.now().toIso8601String(),
           });
-          debugPrint('Notification created for rider ${order.riderId}');
         }
       } catch (e) {
-        debugPrint('Warning: Failed to create notification for rider: $e');
       }
 
       try {
         await _silentReloadOrders();
       } catch (e) {
-        debugPrint('Error in silent reload: $e');
+        // Error in silent reload
       }
 
       if (mounted) {
@@ -751,9 +686,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
           'read': false,
           'created_at': DateTime.now().toIso8601String(),
         });
-        debugPrint('Notification created for rider ${order.riderId}');
       } catch (e) {
-        debugPrint('Warning: Failed to create notification record (table may not exist): $e');
     }
 
       await _loadOrders();
@@ -793,7 +726,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         });
       }
     } catch (e) {
-      debugPrint('Error checking merchant-rider payment: $e');
       if (mounted) {
         setState(() {
           _hasMerchantRiderPayment[orderId] = false;
@@ -1434,7 +1366,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         throw Exception('Could not launch URL');
       }
     } catch (e) {
-      debugPrint('Error downloading image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1596,7 +1527,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         });
       }
     } catch (e) {
-      debugPrint('Error loading rider info: $e');
     }
   }
 
@@ -1701,7 +1631,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
     final customerName = _getCustomerName(order);
     final riderName = order.riderId != null ? _getRiderName(order.riderId) : 'Not assigned';
 
-    debugPrint('_buildToApproveOrderCard for order ${order.id.substring(0, 6)}: receipt=${receipt != null ? "found (${receipt.id.substring(0, 6)})" : "null"}');
 
     if (receipt == null) {
                       return Card(
@@ -2455,7 +2384,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
   Widget build(BuildContext context) {
     final filteredOrders = _getFilteredOrders();
 
-    debugPrint('Build - Tab index: ${_tabController.index}, Filtered orders: ${filteredOrders.length}, Total orders: ${_orders.length}');
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -2520,7 +2448,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                       itemCount: filteredOrders.length,
                       itemBuilder: (context, index) {
                         final order = filteredOrders[index];
-                        debugPrint('Building order card for index $index: ${order.id.substring(0, 6)}, status: ${order.status}, tab: ${_tabController.index}');
 
                         if (!_orderItems.containsKey(order.id)) {
                           _loadOrderDetails(order.id);
@@ -2530,7 +2457,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                           case 0:
                             return _buildPendingOrderCard(order);
                           case 1:
-                            debugPrint('Building To Approve card for order ${order.id.substring(0, 6)}');
                             return _buildToApproveOrderCard(order);
                           case 2:
                             return _buildToOutOrderCard(order);

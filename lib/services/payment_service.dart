@@ -17,7 +17,6 @@ class PaymentService {
       if (response == null) return null;
       return PaymentReceipt.fromJson(response);
     } catch (e) {
-      debugPrint('Error fetching payment receipt: $e');
       return null;
     }
   }
@@ -28,24 +27,14 @@ class PaymentService {
     if (deliveryIds.isEmpty) return {};
 
     try {
-      debugPrint('getPaymentReceipts: Fetching receipts for ${deliveryIds.length} delivery IDs');
-
       final response = await SupabaseService.client
           .from('payments')
           .select();
 
-      debugPrint('getPaymentReceipts: Fetched ${response.length} total payment receipts from database');
-
       final filteredResponse = response.where((receipt) {
         final deliveryId = receipt['delivery_id'] as String?;
-        final matches = deliveryId != null && deliveryIds.contains(deliveryId);
-        if (matches) {
-          debugPrint('getPaymentReceipts: Found receipt for delivery ${deliveryId?.substring(0, 6)} - Status: ${receipt['status']}');
-        }
-        return matches;
+        return deliveryId != null && deliveryIds.contains(deliveryId);
       }).toList();
-
-      debugPrint('getPaymentReceipts: Filtered to ${filteredResponse.length} matching receipts');
 
       final Map<String, PaymentReceipt?> receiptsMap = {};
 
@@ -57,20 +46,13 @@ class PaymentService {
         try {
           final receipt = PaymentReceipt.fromJson(receiptData);
           receiptsMap[receipt.deliveryId] = receipt;
-          debugPrint('getPaymentReceipts: Mapped receipt ${receipt.id.substring(0, 6)} to delivery ${receipt.deliveryId.substring(0, 6)}');
         } catch (e) {
-          debugPrint('Error parsing payment receipt: $e');
-          debugPrint('Receipt data: $receiptData');
+          // Error parsing payment receipt
         }
       }
 
-      final receiptsWithData = receiptsMap.entries.where((e) => e.value != null).length;
-      debugPrint('getPaymentReceipts: Returning ${receiptsWithData} receipts with data out of ${receiptsMap.length} total');
-
       return receiptsMap;
     } catch (e) {
-      debugPrint('Error fetching payment receipts: $e');
-      debugPrint('Stack trace: ${StackTrace.current}');
 
       return {for (var id in deliveryIds) id: null};
     }
@@ -95,7 +77,6 @@ class PaymentService {
 
       return await getPaymentReceipts(deliveryIds);
     } catch (e) {
-      debugPrint('Error fetching merchant payment receipts: $e');
       return {};
     }
   }
@@ -120,7 +101,6 @@ class PaymentService {
           .map<PaymentReceipt>((json) => PaymentReceipt.fromJson(json))
           .toList();
     } catch (e) {
-      debugPrint('Error fetching payment receipts by status: $e');
       return [];
     }
   }
