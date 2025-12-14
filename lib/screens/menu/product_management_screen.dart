@@ -116,6 +116,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
     String? selectedCategory = product?.category;
     File? imageFile;
     bool isAvailable = product?.isAvailable ?? true;
+    bool isSubmitting = false; // Local flag for dialog
 
     await showDialog(
       context: context,
@@ -251,9 +252,17 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
+              onPressed: isSubmitting ? null : () async {
+                if (isSubmitting) return;
+                
+                setDialogState(() {
+                  isSubmitting = true;
+                });
 
                 if (nameController.text.trim().isEmpty) {
+                  setDialogState(() {
+                    isSubmitting = false;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter a product name'),
@@ -266,6 +275,9 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                 if (priceController.text.trim().isEmpty || 
                     double.tryParse(priceController.text.trim()) == null ||
                     double.parse(priceController.text.trim()) <= 0) {
+                  setDialogState(() {
+                    isSubmitting = false;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter a valid price (greater than 0)'),
@@ -277,6 +289,9 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
 
                 final stockValue = int.tryParse(stockController.text.trim()) ?? 0;
                 if (stockValue < 0) {
+                  setDialogState(() {
+                    isSubmitting = false;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Stock cannot be negative'),
@@ -310,6 +325,9 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                     );
                   }
                   if (mounted) {
+                    setDialogState(() {
+                      isSubmitting = false;
+                    });
                     Navigator.pop(context);
                     await _loadData();
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -322,6 +340,9 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                     );
                   }
                 } catch (e) {
+                  setDialogState(() {
+                    isSubmitting = false;
+                  });
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -332,7 +353,13 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                   }
                 }
               },
-              child: Text(product == null ? 'Add' : 'Update'),
+              child: isSubmitting 
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(product == null ? 'Add' : 'Update'),
             ),
           ],
         ),
@@ -484,6 +511,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
       text: addon?.stock.toString() ?? '0',
     );
     bool isAvailable = addon?.isAvailable ?? true;
+    bool isSubmitting = false; // Local flag for dialog
 
     await showDialog(
       context: context,
@@ -551,8 +579,17 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
+              onPressed: isSubmitting ? null : () async {
+                if (isSubmitting) return;
+                
+                setDialogState(() {
+                  isSubmitting = true;
+                });
+
                 if (nameController.text.trim().isEmpty) {
+                  setDialogState(() {
+                    isSubmitting = false;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter an add-on name'),
@@ -564,6 +601,9 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
 
                 final priceValue = double.tryParse(priceController.text.trim());
                 if (priceValue == null || priceValue < 0) {
+                  setDialogState(() {
+                    isSubmitting = false;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter a valid price (0 or greater)'),
@@ -575,6 +615,9 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
 
                 final stockValue = int.tryParse(stockController.text.trim()) ?? 0;
                 if (stockValue < 0) {
+                  setDialogState(() {
+                    isSubmitting = false;
+                  });
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Stock cannot be negative'),
@@ -604,6 +647,9 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                   }
                   
                   if (mounted) {
+                    setDialogState(() {
+                      isSubmitting = false;
+                    });
                     Navigator.pop(context);
                     onSave();
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -616,6 +662,9 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                     );
                   }
                 } catch (e) {
+                  setDialogState(() {
+                    isSubmitting = false;
+                  });
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -626,7 +675,13 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                   }
                 }
               },
-              child: Text(addon == null ? 'Add' : 'Update'),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(addon == null ? 'Add' : 'Update'),
             ),
           ],
         ),

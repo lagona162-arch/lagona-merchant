@@ -19,17 +19,12 @@ class ProductService {
     if (merchantId == null) return [];
 
     final response = await SupabaseService.client
-        .from('merchant_products')
-        .select('category')
+        .from('merchant_categories')
+        .select('name')
         .eq('merchant_id', merchantId)
-        .not('category', 'is', null);
+        .order('name');
 
-    final categories = response
-        .map((e) => e['category'] as String)
-        .toSet()
-        .toList()
-      ..sort();
-    return categories;
+    return response.map((e) => e['name'] as String).toList();
   }
 
   static Future<void> addCategory(String category) async {
@@ -41,14 +36,13 @@ class ProductService {
       throw Exception('Category already exists');
     }
 
-    final result = await SupabaseService.client.from('merchant_products').insert({
-      'merchant_id': merchantId,
-      'name': '_CATEGORY_PLACEHOLDER_$category',
-      'category': category,
-      'price': 0.01,
-      'stock': 0,
-    }).select();
-
+    final result = await SupabaseService.client
+        .from('merchant_categories')
+        .insert({
+          'merchant_id': merchantId,
+          'name': category,
+        })
+        .select();
 
     if (result.isEmpty) {
       throw Exception('Failed to create category');
@@ -59,6 +53,14 @@ class ProductService {
     final merchantId = await _getMerchantId();
     if (merchantId == null) return;
 
+    // Update the category name in merchant_categories table
+    await SupabaseService.client
+        .from('merchant_categories')
+        .update({'name': newCategory})
+        .eq('merchant_id', merchantId)
+        .eq('name', oldCategory);
+
+    // Update all products that reference this category
     await SupabaseService.client
         .from('merchant_products')
         .update({'category': newCategory})
@@ -70,23 +72,23 @@ class ProductService {
     final merchantId = await _getMerchantId();
     if (merchantId == null) return;
 
+    // Check if there are any products using this category
     final products = await SupabaseService.client
         .from('merchant_products')
         .select()
         .eq('merchant_id', merchantId)
-        .eq('category', category)
-        .not('name', 'like', '_CATEGORY_PLACEHOLDER_%');
+        .eq('category', category);
 
     if (products.isNotEmpty) {
       throw Exception('Cannot delete category with existing products');
     }
 
+    // Delete the category from merchant_categories table
     await SupabaseService.client
-        .from('merchant_products')
+        .from('merchant_categories')
         .delete()
         .eq('merchant_id', merchantId)
-        .eq('category', category)
-        .like('name', '_CATEGORY_PLACEHOLDER_%');
+        .eq('name', category);
   }
 
   static Future<List<MerchantProduct>> getProducts() async {
