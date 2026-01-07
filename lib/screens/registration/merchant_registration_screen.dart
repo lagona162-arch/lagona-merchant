@@ -30,6 +30,7 @@ class _MerchantRegistrationScreenState
   final _ownerContactController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _loadingStationCodeController = TextEditingController();
 
   File? _dtiCertificate;
   File? _mayorPermit;
@@ -43,6 +44,34 @@ class _MerchantRegistrationScreenState
   String? _selectedPlaceId;
   bool _municipalityAutoFilled = false;
   String? _lastAutoFilledMunicipality;
+  bool _isValidatingLoadingStationCode = false;
+
+  Future<bool> _validateLoadingStationCode(String code) async {
+    if (code.isEmpty) return false;
+    
+    try {
+      final trimmedCode = code.trim().toUpperCase();
+      debugPrint('Validating loading station code: $trimmedCode');
+      
+      final response = await SupabaseService.client
+          .from('loading_stations')
+          .select('id, ls_code, name')
+          .eq('ls_code', trimmedCode)
+          .maybeSingle();
+      
+      final isValid = response != null;
+      if (isValid) {
+        debugPrint('Loading station code validated successfully: ${response['name']}');
+      } else {
+        debugPrint('Loading station code not found in database: $trimmedCode');
+      }
+      
+      return isValid;
+    } catch (e) {
+      debugPrint('Error validating loading station code: $e');
+      return false;
+    }
+  }
 
   Future<void> _pickImage(ImageSource source, String documentType) async {
     final XFile? image = await _picker.pickImage(source: source);
@@ -104,6 +133,41 @@ class _MerchantRegistrationScreenState
         return;
       }
 
+      // Validate loading station code
+      final loadingStationCode = _loadingStationCodeController.text.trim();
+      if (loadingStationCode.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter a loading station code'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      setState(() => _isValidatingLoadingStationCode = true);
+      final isValidCode = await _validateLoadingStationCode(loadingStationCode);
+      setState(() => _isValidatingLoadingStationCode = false);
+
+      if (!isValidCode) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Invalid loading station code. The code "${loadingStationCode.toUpperCase()}" does not exist in our system. Please verify your code and try again.',
+              ),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
       if (_dtiCertificate == null && _mayorPermit == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -153,6 +217,7 @@ class _MerchantRegistrationScreenState
         placeId: _selectedPlaceId,
         dtiCertificateUrl: dtiUrl,
         mayorPermitUrl: mayorPermitUrl,
+        loadingStationCode: loadingStationCode.toUpperCase(),
       );
 
       if (SupabaseService.isSignedIn) {
@@ -226,6 +291,7 @@ class _MerchantRegistrationScreenState
     _ownerContactController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _loadingStationCodeController.dispose();
     super.dispose();
   }
 
@@ -395,6 +461,8 @@ class _MerchantRegistrationScreenState
                         return null;
                       },
                     ),
+                    const SizedBox(height: 16),
+                    _buildLoadingStationCodeField(),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -880,6 +948,61 @@ class _MerchantRegistrationScreenState
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingStationCodeField() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextFormField(
+        controller: _loadingStationCodeController,
+        textCapitalization: TextCapitalization.characters,
+        validator: (value) {
+          if (value?.isEmpty ?? true) {
+            return 'Loading station code is required';
+          }
+          return null;
+        },
+        decoration: InputDecoration(
+          labelText: 'Loading Station Code',
+          hintText: 'Enter your loading station code',
+          prefixIcon: Icon(Icons.local_shipping_outlined, color: AppColors.primary),
+          suffixIcon: _isValidatingLoadingStationCode
+              ? const Padding(
+                  padding: EdgeInsets.all(12.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  ),
+                )
+              : null,
+          helperText: 'This code is required to register as a merchant',
+          helperMaxLines: 2,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+        ),
       ),
     );
   }

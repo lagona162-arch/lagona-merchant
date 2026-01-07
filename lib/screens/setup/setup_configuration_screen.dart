@@ -6,7 +6,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/colors.dart';
 import '../../services/merchant_service.dart';
 import '../../services/supabase_service.dart';
+import '../../services/google_places_service.dart';
 import '../../models/merchant.dart';
+import '../../widgets/address_autocomplete_field.dart';
 
 class SetupConfigurationScreen extends StatefulWidget {
   const SetupConfigurationScreen({super.key});
@@ -60,12 +62,21 @@ class _ConfigurationTab extends StatefulWidget {
 class _ConfigurationTabState extends State<_ConfigurationTab> {
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _businessNameController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
   File? _logoImage;
   String? _currentLogoUrl;
   bool _isLoading = false;
   bool _isEditingBusinessName = false;
+  bool _isEditingLocation = false;
   String? _currentMerchantId;
   String? _currentBusinessName;
+  String? _currentAddress;
+  double? _currentLatitude;
+  double? _currentLongitude;
+  String? _currentPlaceId;
+  double? _newLatitude;
+  double? _newLongitude;
+  String? _newPlaceId;
   Merchant? _merchant;
 
   @override
@@ -77,6 +88,7 @@ class _ConfigurationTabState extends State<_ConfigurationTab> {
   @override
   void dispose() {
     _businessNameController.dispose();
+    _addressController.dispose();
     super.dispose();
   }
 
@@ -92,7 +104,16 @@ class _ConfigurationTabState extends State<_ConfigurationTab> {
         _currentLogoUrl = merchant.previewImage;
         _currentBusinessName = merchant.businessName;
         _businessNameController.text = merchant.businessName;
+        _currentAddress = merchant.address;
+        _addressController.text = merchant.address;
+        _currentLatitude = merchant.latitude;
+        _currentLongitude = merchant.longitude;
+        _currentPlaceId = merchant.mapPlaceId;
         _isEditingBusinessName = false;
+        _isEditingLocation = false;
+        _newLatitude = null;
+        _newLongitude = null;
+        _newPlaceId = null;
       });
     }
   }
@@ -128,7 +149,14 @@ class _ConfigurationTabState extends State<_ConfigurationTab> {
       return;
     }
 
-    if (_logoImage == null && businessName == _currentBusinessName) {
+    final hasLocationChanges = _newLatitude != null && _newLongitude != null &&
+        (_newLatitude != _currentLatitude || _newLongitude != _currentLongitude);
+    final hasAddressChanges = _addressController.text.trim() != _currentAddress;
+    
+    // If location changed, we should also update the address to keep them in sync
+    final shouldUpdateAddress = hasAddressChanges || hasLocationChanges;
+    
+    if (_logoImage == null && businessName == _currentBusinessName && !hasLocationChanges && !hasAddressChanges) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No changes to save'),
@@ -151,6 +179,10 @@ class _ConfigurationTabState extends State<_ConfigurationTab> {
         merchantId: _currentMerchantId!,
         businessName: businessName != _currentBusinessName ? businessName : null,
         previewImage: logoUrl,
+        address: shouldUpdateAddress ? _addressController.text.trim() : null,
+        latitude: hasLocationChanges ? _newLatitude : null,
+        longitude: hasLocationChanges ? _newLongitude : null,
+        placeId: hasLocationChanges ? _newPlaceId : null,
       );
 
       await _loadMerchantData();
@@ -158,6 +190,10 @@ class _ConfigurationTabState extends State<_ConfigurationTab> {
       setState(() {
         _logoImage = null;
         _isEditingBusinessName = false;
+        _isEditingLocation = false;
+        _newLatitude = null;
+        _newLongitude = null;
+        _newPlaceId = null;
       });
 
       if (mounted) {
@@ -327,6 +363,72 @@ class _ConfigurationTabState extends State<_ConfigurationTab> {
                     },
                   ),
                 ),
+              const SizedBox(height: 32),
+              _buildSectionHeader('Business Location'),
+              const SizedBox(height: 12),
+              const Text(
+                'Update your business location. This helps customers and riders find you.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              AddressAutocompleteField(
+                controller: _addressController,
+                label: 'Business Address',
+                hint: 'Enter or select your business address',
+                icon: Icons.location_on,
+                initialLatitude: _currentLatitude,
+                initialLongitude: _currentLongitude,
+                onPlaceSelected: (placeDetails) {
+                  setState(() {
+                    // Update address controller with formatted address from place details
+                    if (placeDetails.formattedAddress.isNotEmpty) {
+                      _addressController.text = placeDetails.formattedAddress;
+                    }
+                    _newLatitude = placeDetails.latitude;
+                    _newLongitude = placeDetails.longitude;
+                    _newPlaceId = placeDetails.placeId;
+                    _isEditingLocation = true;
+                  });
+                },
+              ),
+              if (_currentLatitude != null && _currentLongitude != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Current coordinates: ${_currentLatitude!.toStringAsFixed(6)}, ${_currentLongitude!.toStringAsFixed(6)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+              if (_newLatitude != null && _newLongitude != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'New coordinates: ${_newLatitude!.toStringAsFixed(6)}, ${_newLongitude!.toStringAsFixed(6)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 32),
               _buildSectionHeader('Logo Upload'),
               const SizedBox(height: 12),

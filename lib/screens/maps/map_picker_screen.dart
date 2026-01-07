@@ -26,6 +26,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
   String? _selectedAddress;
   bool _isLoadingAddress = false;
   bool _isInitializing = true;
+  double _currentZoom = 15.0;
 
   @override
   void initState() {
@@ -236,7 +237,7 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
     }
   }
 
-  void _onMapCreated(GoogleMapController controller) {
+  void _onMapCreated(GoogleMapController controller) async {
     _mapController = controller;
 
     Future.delayed(const Duration(milliseconds: 100), () async {
@@ -244,8 +245,35 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
         await _mapController!.animateCamera(
           CameraUpdate.newLatLngZoom(_selectedLocation, 15),
         );
+        setState(() {
+          _currentZoom = 15.0;
+        });
       }
     });
+  }
+
+  Future<void> _zoomIn() async {
+    if (_mapController == null) return;
+    
+    final newZoom = _currentZoom + 1.0;
+    if (newZoom > 20.0) return; // Max zoom level
+    
+    await _mapController!.animateCamera(
+      CameraUpdate.zoomIn(),
+    );
+    // onCameraMove will update _currentZoom
+  }
+
+  Future<void> _zoomOut() async {
+    if (_mapController == null) return;
+    
+    final newZoom = _currentZoom - 1.0;
+    if (newZoom < 3.0) return; // Min zoom level
+    
+    await _mapController!.animateCamera(
+      CameraUpdate.zoomOut(),
+    );
+    // onCameraMove will update _currentZoom
   }
 
   void _confirmSelection() {
@@ -274,6 +302,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
               zoom: 15,
             ),
             onTap: _onMapTap,
+            onCameraMove: (CameraPosition position) {
+              setState(() {
+                _currentZoom = position.zoom;
+              });
+            },
             markers: {
               Marker(
                 markerId: const MarkerId('selected_location'),
@@ -302,14 +335,81 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
           Positioned(
             top: 16,
             right: 16,
-            child: FloatingActionButton(
-              mini: true,
-              onPressed: _onMyLocationPressed,
-              backgroundColor: Colors.white,
-              child: Icon(
-                Icons.my_location,
-                color: AppColors.primary,
-              ),
+            child: Column(
+              children: [
+                FloatingActionButton(
+                  mini: true,
+                  onPressed: _onMyLocationPressed,
+                  backgroundColor: Colors.white,
+                  child: Icon(
+                    Icons.my_location,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _zoomIn,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(8),
+                            topRight: Radius.circular(8),
+                          ),
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.add,
+                              color: AppColors.primary,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Container(
+                        height: 1,
+                        color: Colors.grey.shade200,
+                      ),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _zoomOut,
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(8),
+                            bottomRight: Radius.circular(8),
+                          ),
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.remove,
+                              color: AppColors.primary,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
 

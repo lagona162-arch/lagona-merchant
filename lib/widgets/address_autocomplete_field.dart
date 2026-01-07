@@ -12,6 +12,8 @@ class AddressAutocompleteField extends StatefulWidget {
   final String? Function(String?)? validator;
   final Function(PlaceDetails)? onPlaceSelected;
   final int maxLines;
+  final double? initialLatitude;
+  final double? initialLongitude;
 
   const AddressAutocompleteField({
     super.key,
@@ -22,6 +24,8 @@ class AddressAutocompleteField extends StatefulWidget {
     this.validator,
     this.onPlaceSelected,
     this.maxLines = 2,
+    this.initialLatitude,
+    this.initialLongitude,
   });
 
   @override
@@ -168,10 +172,10 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
 
   Future<void> _openMapPicker(BuildContext context) async {
 
-    double? initialLat;
-    double? initialLng;
+    // Use provided initial coordinates, or fall back to controller text if available
+    double? initialLat = widget.initialLatitude;
+    double? initialLng = widget.initialLongitude;
     String? initialAddress;
-
 
     if (widget.controller.text.isNotEmpty) {
       initialAddress = widget.controller.text;

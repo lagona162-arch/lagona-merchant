@@ -39,7 +39,7 @@ class ProductService {
     final result = await SupabaseService.client
         .from('merchant_categories')
         .insert({
-          'merchant_id': merchantId,
+      'merchant_id': merchantId,
           'name': category,
         })
         .select();

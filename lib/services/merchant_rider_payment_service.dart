@@ -47,39 +47,121 @@ class MerchantRiderPaymentService {
     required String merchantId,
     required String riderId,
     required double amount,
-    required String riderGcashNumber,
-    required String referenceNumber,
-    required String senderName,
-    required File paymentPhoto,
+    required String paymentMethod, // 'e_wallet' or 'in_person'
+    String? riderGcashNumber,
+    String? referenceNumber,
+    String? senderName,
+    File? paymentPhoto,
   }) async {
     try {
-      final photoUrl = await uploadPaymentPhoto(paymentPhoto, deliveryId);
+      String? photoUrl;
+      if (paymentPhoto != null) {
+        photoUrl = await uploadPaymentPhoto(paymentPhoto, deliveryId);
+      }
 
-      final paymentData = {
-        'delivery_id': deliveryId,
-        'merchant_id': merchantId,
-        'rider_id': riderId,
+      // Check if a payment record already exists for this delivery
+      final existingPayment = await getMerchantRiderPayment(deliveryId);
+      debugPrint('Existing payment check for delivery $deliveryId: ${existingPayment != null ? "Found" : "Not found"}');
+      if (existingPayment != null) {
+        debugPrint('Existing payment details: id=${existingPayment['id']}, status=${existingPayment['status']}, method=${existingPayment['payment_method']}');
+      }
+      
+      // Prepare payment data - ensure all fields are explicitly set
+      final paymentData = <String, dynamic>{
         'amount': amount,
-        'rider_gcash_number': riderGcashNumber,
-        'reference_number': referenceNumber,
-        'sender_name': senderName,
-        'payment_photo_url': photoUrl,
+        'payment_method': paymentMethod,
         'status': 'pending_confirmation',
-        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
-      await SupabaseService.client
-          .from('merchant_rider_payments')
-          .insert(paymentData);
+      // Set e-wallet fields based on payment method
+      if (paymentMethod == 'e_wallet') {
+        paymentData['rider_gcash_number'] = riderGcashNumber;
+        paymentData['reference_number'] = referenceNumber;
+        paymentData['sender_name'] = senderName;
+        paymentData['payment_photo_url'] = photoUrl;
+      } else {
+        // For in-person payments, explicitly set to null
+        paymentData['rider_gcash_number'] = null;
+        paymentData['reference_number'] = null;
+        paymentData['sender_name'] = null;
+        paymentData['payment_photo_url'] = null;
+      }
 
-      debugPrint('Merchant-to-rider payment submitted: $deliveryId');
+      if (existingPayment != null) {
+        // RLS policies may prevent updates, so delete and re-insert instead
+        final paymentId = existingPayment['id'] as String;
+        debugPrint('Deleting existing payment record with ID: $paymentId to re-create with new data');
+        
+        try {
+          // Delete the existing payment record
+          await SupabaseService.client
+              .from('merchant_rider_payments')
+              .delete()
+              .eq('id', paymentId);
+          
+          debugPrint('Deleted existing payment record. Creating new one...');
+        } catch (e) {
+          debugPrint('Warning: Could not delete existing payment record: $e');
+          // Continue anyway - try to insert (might fail due to unique constraint, but worth trying)
+        }
+        
+        // Insert new payment record with updated data
+        paymentData['delivery_id'] = deliveryId;
+        paymentData['merchant_id'] = merchantId;
+        paymentData['rider_id'] = riderId;
+        paymentData['created_at'] = DateTime.now().toIso8601String();
+        
+        final insertResponse = await SupabaseService.client
+            .from('merchant_rider_payments')
+            .insert(paymentData)
+            .select();
+        
+        if (insertResponse.isEmpty) {
+          throw Exception('Failed to create payment record after deleting old one.');
+        }
+        
+        debugPrint('Successfully re-created payment record for delivery: $deliveryId');
+        debugPrint('Insert response: $insertResponse');
+      } else {
+        // Insert new payment record
+        paymentData['delivery_id'] = deliveryId;
+        paymentData['merchant_id'] = merchantId;
+        paymentData['rider_id'] = riderId;
+        paymentData['created_at'] = DateTime.now().toIso8601String();
+        
+        final insertResponse = await SupabaseService.client
+            .from('merchant_rider_payments')
+            .insert(paymentData)
+            .select();
+        
+        debugPrint('Created new payment record for delivery: $deliveryId');
+        debugPrint('Insert response: $insertResponse');
+      }
 
+      debugPrint('Merchant-to-rider payment submitted: $deliveryId (method: $paymentMethod)');
+
+      // Set notification title and message based on payment method
+      final String title;
+      final String message;
+      
+      if (paymentMethod == 'e_wallet') {
+        title = 'Payment Received - Please Confirm';
+        message = 'Merchant has sent payment of ₱${amount.toStringAsFixed(2)} via e-wallet. Please confirm receipt.';
+      } else {
+        // in_person payment
+        title = 'Cash Payment Offer - Collect Payment';
+        message = 'Merchant offers to pay ₱${amount.toStringAsFixed(2)} in cash. Please collect payment when you meet.';
+      }
+      
+      debugPrint('Creating notification: title="$title", message="$message"');
+      
       await SupabaseService.client.from('notifications').insert({
         'rider_id': riderId,
         'delivery_id': deliveryId,
         'type': 'merchant_payment_pending',
-        'title': 'Payment Received - Please Confirm',
-        'message': 'Merchant has sent payment of ₱${amount.toStringAsFixed(2)}. Please confirm receipt.',
+        'title': title,
+        'message': message,
         'read': false,
         'created_at': DateTime.now().toIso8601String(),
       });
@@ -93,13 +175,24 @@ class MerchantRiderPaymentService {
 
   static Future<Map<String, dynamic>?> getMerchantRiderPayment(String deliveryId) async {
     try {
+      // Get all payment records for this delivery, ordered by updated_at descending
+      // This handles cases where there might be multiple records (e.g., rejected then re-offered)
+      // We use updated_at to get the most recently updated record (e.g., when rider accepts)
       final response = await SupabaseService.client
           .from('merchant_rider_payments')
           .select('*')
           .eq('delivery_id', deliveryId)
-          .maybeSingle();
+          .order('updated_at', ascending: false);
 
-      return response;
+      if (response.isEmpty) {
+        return null;
+      }
+
+      // Return the most recently updated payment record (first one after ordering by updated_at desc)
+      // This ensures we get the latest status (e.g., confirmed after rider accepts)
+      final latestPayment = response.first as Map<String, dynamic>;
+      
+      return latestPayment;
     } catch (e) {
       debugPrint('Error fetching merchant-rider payment: $e');
       return null;

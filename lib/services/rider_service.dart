@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../models/rider.dart';
 import '../services/supabase_service.dart';
 import '../services/merchant_service.dart';
 import '../services/rider_wallet_service.dart';
+import '../core/timezone_helper.dart';
 
 class RiderService {
 
@@ -508,5 +510,218 @@ class RiderService {
     }
 
     return null;
+  }
+
+  /// Calculate distance between two coordinates using Haversine formula
+  static double calculateDistance(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const double earthRadius = 6371; // Earth radius in kilometers
+
+    final dLat = _degreesToRadians(lat2 - lat1);
+    final dLon = _degreesToRadians(lon2 - lon1);
+
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_degreesToRadians(lat1)) *
+            math.cos(_degreesToRadians(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.asin(math.sqrt(a));
+
+    return earthRadius * c;
+  }
+
+  static double _degreesToRadians(double degrees) {
+    return degrees * (3.141592653589793 / 180.0);
+  }
+
+  /// Get riders within a specified radius (in km) from a location
+  static Future<List<Rider>> getRidersWithinRadius({
+    required double latitude,
+    required double longitude,
+    required double radiusKm,
+    List<String>? excludeRiderIds,
+  }) async {
+    try {
+      final allRiders = await getAvailableRiders();
+      
+      // Filter by distance
+      final nearbyRiders = allRiders.where((rider) {
+        if (rider.latitude == null || rider.longitude == null) return false;
+        if (excludeRiderIds != null && excludeRiderIds.contains(rider.id)) {
+          return false;
+        }
+        
+        final distance = calculateDistance(
+          latitude,
+          longitude,
+          rider.latitude!,
+          rider.longitude!,
+        );
+        
+        return distance <= radiusKm;
+      }).toList();
+
+      return nearbyRiders;
+    } catch (e) {
+      debugPrint('Error fetching riders within radius: $e');
+      return [];
+    }
+  }
+
+  /// Send delivery offer to a rider
+  /// For priority offers: expiresIn should be the total window (e.g., 10 minutes)
+  /// For broadcast offers: expiresIn should be when the broadcast expires
+  static Future<void> sendDeliveryOffer({
+    required String deliveryId,
+    required String riderId,
+    required String offerType, // 'priority' or 'broadcast'
+    required Duration expiresIn, // Total time until expiration (from now)
+  }) async {
+    try {
+      // First, expire any existing offers for this delivery_id + rider_id combination
+      // This prevents duplicate offer errors
+      try {
+        await SupabaseService.client
+            .from('delivery_offers')
+            .update({'status': 'expired'})
+            .eq('delivery_id', deliveryId)
+            .eq('rider_id', riderId)
+            .eq('status', 'pending');
+      } catch (e) {
+        debugPrint('Warning: Error expiring existing offers before sending new one: $e');
+        // Continue anyway - try to insert the new offer
+      }
+      
+      // Calculate expiration time in PHT, then convert to UTC for database
+      final phtNow = TimezoneHelper.nowPHT();
+      final phtExpiresAt = phtNow.add(expiresIn);
+      final utcExpiresAt = TimezoneHelper.phtToUTC(phtExpiresAt);
+      
+      await SupabaseService.client.from('delivery_offers').insert({
+        'delivery_id': deliveryId,
+        'rider_id': riderId,
+        'offer_type': offerType,
+        'status': 'pending',
+        'expires_at': utcExpiresAt.toIso8601String(),
+      });
+
+      // Send notification to rider
+      final minutesRemaining = expiresIn.inMinutes;
+      final secondsRemaining = expiresIn.inSeconds % 60;
+      String timeRemaining;
+      if (minutesRemaining > 0) {
+        timeRemaining = '$minutesRemaining minute${minutesRemaining > 1 ? 's' : ''}';
+        if (secondsRemaining > 0) {
+          timeRemaining += ' and $secondsRemaining second${secondsRemaining > 1 ? 's' : ''}';
+        }
+      } else {
+        timeRemaining = '$secondsRemaining second${secondsRemaining > 1 ? 's' : ''}';
+      }
+
+      await SupabaseService.client.from('notifications').insert({
+        'rider_id': riderId,
+        'delivery_id': deliveryId,
+        'type': offerType == 'priority' ? 'priority_delivery_offer' : 'delivery_offer',
+        'title': offerType == 'priority' ? 'Priority Delivery Offer' : 'New Delivery Offer',
+        'message': offerType == 'priority' 
+            ? 'You have a priority delivery offer. You have exclusive access for the first minute, then all riders can accept. Total window: $timeRemaining.'
+            : 'You have a new delivery offer. Please accept or decline within $timeRemaining.',
+        'read': false,
+        'is_read': false,
+      });
+    } catch (e) {
+      debugPrint('Error sending delivery offer: $e');
+      rethrow;
+    }
+  }
+
+  /// Check if a rider has accepted an offer
+  static Future<bool> checkRiderAcceptedOffer({
+    required String deliveryId,
+    required String riderId,
+  }) async {
+    try {
+      final response = await SupabaseService.client
+          .from('delivery_offers')
+          .select('status')
+          .eq('delivery_id', deliveryId)
+          .eq('rider_id', riderId)
+          .eq('status', 'accepted')
+          .maybeSingle();
+
+      return response != null;
+    } catch (e) {
+      debugPrint('Error checking rider offer acceptance: $e');
+      return false;
+    }
+  }
+
+  /// Check if any rider has accepted an offer for a delivery
+  static Future<String?> checkAnyRiderAccepted(String deliveryId) async {
+    try {
+      final response = await SupabaseService.client
+          .from('delivery_offers')
+          .select('rider_id')
+          .eq('delivery_id', deliveryId)
+          .eq('status', 'accepted')
+          .maybeSingle();
+
+      return response != null ? response['rider_id'] as String? : null;
+    } catch (e) {
+      debugPrint('Error checking if any rider accepted: $e');
+      return null;
+    }
+  }
+
+  /// Get pending offers for a delivery
+  static Future<List<Map<String, dynamic>>> getPendingOffers(String deliveryId) async {
+    try {
+      // Compare with current UTC time (database stores in UTC)
+      final utcNow = TimezoneHelper.nowUTC();
+      final response = await SupabaseService.client
+          .from('delivery_offers')
+          .select('id, rider_id, offer_type, expires_at')
+          .eq('delivery_id', deliveryId)
+          .eq('status', 'pending')
+          .lt('expires_at', utcNow.toIso8601String());
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error getting pending offers: $e');
+      return [];
+    }
+  }
+
+  /// Expire old offers (only those past expiration time)
+  static Future<void> expireOldOffers(String deliveryId) async {
+    try {
+      // Compare with current UTC time (database stores in UTC)
+      final utcNow = TimezoneHelper.nowUTC();
+      await SupabaseService.client
+          .from('delivery_offers')
+          .update({'status': 'expired'})
+          .eq('delivery_id', deliveryId)
+          .eq('status', 'pending')
+          .lt('expires_at', utcNow.toIso8601String());
+    } catch (e) {
+      debugPrint('Error expiring old offers: $e');
+    }
+  }
+
+  /// Expire all pending offers for a delivery (used when cancelling or starting a new search)
+  static Future<void> expireAllPendingOffers(String deliveryId) async {
+    try {
+      await SupabaseService.client
+          .from('delivery_offers')
+          .update({'status': 'expired'})
+          .eq('delivery_id', deliveryId)
+          .eq('status', 'pending');
+    } catch (e) {
+      debugPrint('Error expiring all pending offers: $e');
+    }
   }
 }

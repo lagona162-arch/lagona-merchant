@@ -81,16 +81,11 @@ class OrderService {
           )
         ''')
         .eq('delivery_id', deliveryId);
-
-    debugPrint('getOrderItems response: $response');
     
     return response.map((json) {
         // Use DeliveryItem.fromJson to properly parse addons
         try {
-          debugPrint('Parsing DeliveryItem JSON: $json');
-          debugPrint('Addons in JSON: ${json['delivery_item_addons']}');
           final item = DeliveryItem.fromJson(json);
-          debugPrint('Parsed item addons count: ${item.addons.length}');
           return item;
         } catch (e) {
           debugPrint('Error parsing DeliveryItem: $e');

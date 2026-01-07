@@ -143,6 +143,7 @@ class SupabaseService {
     String? placeId,
     String? dtiCertificateUrl,
     String? mayorPermitUrl,
+    String? loadingStationCode,
   }) async {
     try {
 
@@ -160,6 +161,7 @@ class SupabaseService {
           'map_place_id': placeId,
           'dti_certificate_url': dtiCertificateUrl,
           'mayor_permit_url': mayorPermitUrl,
+          'loading_station_code': loadingStationCode,
         });
         debugPrint('Pending merchant data saved successfully via direct insert');
       } catch (e) {
