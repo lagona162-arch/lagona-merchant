@@ -2510,28 +2510,6 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
             ],
             if (order.status == DeliveryStatus.prepared || order.status == DeliveryStatus.ready)
               const SizedBox(height: 12),
-            if (order.status == DeliveryStatus.prepared)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _loadingStates[order.id] == true
-                      ? null
-                      : () => _notifyRiderReadyForPickup(order.id),
-                  icon: _loadingStates[order.id] == true
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.notifications_active),
-                  label: const Text('Notify Rider - Ready for Pickup'),
-                                          style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                                            foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
             if (order.deliveryFee != null && order.deliveryFee! > 0 && order.riderId != null) ...[
               Builder(
                 builder: (context) {
@@ -2544,6 +2522,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                   final hasPayment = _hasMerchantRiderPayment[order.id] ?? false;
                   final paymentStatus = _paymentStatuses[order.id];
                   final isRejected = paymentStatus == 'rejected';
+                  final isConfirmed = paymentStatus == 'confirmed';
                   
                   // Periodically refresh payment status if it's pending (to catch rider acceptance)
                   if (hasPayment && paymentStatus == 'pending_confirmation') {
@@ -2557,8 +2536,9 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                     });
                   }
                   
-                  // Show payment button if no payment exists OR if payment was rejected
-                  if (!hasPayment || isRejected) {
+                  // Step 1: Show "Pay to Rider" button if payment is not confirmed or doesn't exist
+                  // Step 2: Show "Notify Rider" button only after payment is confirmed by rider
+                  if (!hasPayment || isRejected || !isConfirmed) {
                     return Column(
                       children: [
                         if (isRejected) ...[
@@ -2620,45 +2600,98 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                     final isInPerson = paymentMethod == 'in_person';
                     final isConfirmed = paymentStatus == 'confirmed';
                     
-                    String statusMessage;
-                    if (isInPerson) {
-                      if (isConfirmed) {
-                        statusMessage = 'In-person payment offer confirmed. Waiting for rider to collect cash.';
-                      } else {
-                        statusMessage = 'In-person payment offer sent. Waiting for rider to confirm the offer.';
-                      }
-                    } else {
-                      statusMessage = 'Payment submitted. Waiting for rider confirmation.';
-                    }
-                    
-                    return Column(
-                      children: [
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.success),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.check_circle, color: AppColors.success, size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  statusMessage,
-                                  style: TextStyle(
-                                    color: AppColors.success,
-                                    fontWeight: FontWeight.w500,
+                    // If payment is confirmed, show "Notify Rider" button
+                    if (isConfirmed) {
+                      return Column(
+                        children: [
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.success),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    isInPerson
+                                        ? 'Payment confirmed by rider. You can now notify them that the order is ready for pickup.'
+                                        : 'Payment confirmed by rider. You can now notify them that the order is ready for pickup.',
+                                    style: TextStyle(
+                                      color: AppColors.success,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    );
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _loadingStates[order.id] == true
+                                  ? null
+                                  : () => _notifyRiderReadyForPickup(order.id),
+                              icon: _loadingStates[order.id] == true
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.notifications_active),
+                              label: const Text('Notify Rider - Ready for Pickup'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    } else {
+                      // Payment is pending confirmation - show status message
+                      String statusMessage;
+                      if (isInPerson) {
+                        statusMessage = 'In-person payment offer sent. Waiting for rider to confirm the offer.';
+                      } else {
+                        statusMessage = 'Payment submitted. Waiting for rider confirmation.';
+                      }
+                      
+                      return Column(
+                        children: [
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.success),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    statusMessage,
+                                    style: TextStyle(
+                                      color: AppColors.success,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }
                   }
                 },
               ),
