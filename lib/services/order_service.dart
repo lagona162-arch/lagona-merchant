@@ -81,7 +81,7 @@ class OrderService {
           )
         ''')
         .eq('delivery_id', deliveryId);
-    
+
     return response.map((json) {
         // Use DeliveryItem.fromJson to properly parse addons
         try {

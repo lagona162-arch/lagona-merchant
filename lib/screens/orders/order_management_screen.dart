@@ -428,56 +428,56 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
               }
             },
             child: ValueListenableBuilder<String>(
-              valueListenable: phaseNotifier,
-              builder: (context, phase, _) {
-                return ValueListenableBuilder<int>(
-                  valueListenable: elapsedNotifier,
-                  builder: (context, elapsed, _) {
-                    return AlertDialog(
-                      title: const Text('Finding Rider'),
-                      content: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const CircularProgressIndicator(),
-                          const SizedBox(height: 16),
-                          Text(
-                            phase,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
+            valueListenable: phaseNotifier,
+            builder: (context, phase, _) {
+              return ValueListenableBuilder<int>(
+                valueListenable: elapsedNotifier,
+                builder: (context, elapsed, _) {
+                  return AlertDialog(
+                    title: const Text('Finding Rider'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text(
+                          phase,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Time elapsed: ${(elapsed ~/ 60).toString().padLeft(2, '0')}:${(elapsed % 60).toString().padLeft(2, '0')} / 10:00',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Time elapsed: ${(elapsed ~/ 60).toString().padLeft(2, '0')}:${(elapsed % 60).toString().padLeft(2, '0')} / 10:00',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
+                        ),
+                        const SizedBox(height: 8),
+                        LinearProgressIndicator(
+                          value: elapsed / totalSeconds,
+                          backgroundColor: Colors.grey[300],
+                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          elapsed < 60
+                              ? 'Priority riders have exclusive access'
+                              : 'All nearby riders can now accept',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                            fontStyle: FontStyle.italic,
                           ),
-                          const SizedBox(height: 8),
-                          LinearProgressIndicator(
-                            value: elapsed / totalSeconds,
-                            backgroundColor: Colors.grey[300],
-                            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            elapsed < 60
-                                ? 'Priority riders have exclusive access'
-                                : 'All nearby riders can now accept',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary,
-                              fontStyle: FontStyle.italic,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            isCancelled = true;
-                            progressTimer?.cancel();
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          isCancelled = true;
+                          progressTimer?.cancel();
                             // Reset loading state immediately
                             if (mounted) {
                               setState(() => _loadingStates[orderId] = false);
@@ -486,15 +486,15 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                             if (mounted && dialogContext != null && !isDialogClosed) {
                               isDialogClosed = true;
                               Navigator.of(dialogContext!, rootNavigator: true).pop();
-                            }
-                          },
-                          child: const Text('Cancel'),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
+                          }
+                        },
+                        child: const Text('Cancel'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
             ),
           );
         },
@@ -513,7 +513,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
       try {
         priorityRiders = await RiderService.getPriorityRiders(_currentMerchantId!);
         availablePriorityRiders =
-            priorityRiders.where((r) => r.isAvailable).toList();
+          priorityRiders.where((r) => r.isAvailable).toList();
       } catch (e) {
         debugPrint('Error fetching priority riders: $e');
         // Continue with broadcast phase if priority riders fail
@@ -575,11 +575,11 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         List<Rider> nearbyRiders = [];
         try {
           nearbyRiders = await RiderService.getRidersWithinRadius(
-            latitude: order.pickupLatitude!,
-            longitude: order.pickupLongitude!,
-            radiusKm: 5.0,
-            excludeRiderIds: null, // Don't exclude priority riders - they can still accept
-          );
+          latitude: order.pickupLatitude!,
+          longitude: order.pickupLongitude!,
+          radiusKm: 5.0,
+          excludeRiderIds: null, // Don't exclude priority riders - they can still accept
+        );
         } catch (e) {
           debugPrint('Error fetching nearby riders: $e');
           // Continue anyway - might still have priority riders
@@ -613,6 +613,36 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
               // Continue with other riders even if one fails
             }
           }
+
+          // Wait and check for acceptances from ANY rider (priority or broadcast) until 10 minutes total
+          const broadcastCheckInterval = Duration(seconds: 2);
+          int broadcastChecksRemaining = remainingTime.inSeconds ~/ broadcastCheckInterval.inSeconds;
+
+          while (broadcastChecksRemaining > 0 && assignedRiderId == null && !isCancelled) {
+            await Future.delayed(broadcastCheckInterval);
+            broadcastChecksRemaining--;
+
+            // Update dialog phase
+            if (mounted && !isCancelled) {
+              phaseNotifier.value = 'Waiting for riders to accept... (${availablePriorityRiders.length} priority, ${ridersToBroadcast.length} nearby)';
+            }
+
+            // Check if ANY rider accepted (more efficient - single query)
+            final acceptedRiderId = await RiderService.checkAnyRiderAccepted(orderId);
+            if (acceptedRiderId != null) {
+              assignedRiderId = acceptedRiderId;
+              break;
+            }
+
+            // Check if we've exceeded the total 10-minute window
+            final currentElapsed = DateTime.now().difference(startTime);
+            if (currentElapsed >= totalWindow) {
+              break;
+            }
+          }
+
+          // Expire all remaining offers after 10-minute window
+          await RiderService.expireOldOffers(orderId);
         } else {
           // No nearby riders found, but keep the dialog open and continue checking
           if (mounted && !isCancelled) {
@@ -668,7 +698,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         
         // Dialog should already be closed by cancel button, but ensure it's closed
         if (mounted && dialogContext != null && !isDialogClosed) {
-          try {
+            try {
             isDialogClosed = true;
             Navigator.of(dialogContext!, rootNavigator: true).pop();
           } catch (e) {
@@ -2600,8 +2630,8 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                     final isInPerson = paymentMethod == 'in_person';
                     final isConfirmed = paymentStatus == 'confirmed';
                     
-                    // If payment is confirmed, show "Notify Rider" button
-                    if (isConfirmed) {
+                    // If payment is confirmed, show "Notify Rider" button (but not if order is already picked up)
+                      if (isConfirmed) {
                       return Column(
                         children: [
                           const SizedBox(height: 8),
@@ -2630,67 +2660,70 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                               ],
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _loadingStates[order.id] == true
-                                  ? null
-                                  : () => _notifyRiderReadyForPickup(order.id),
-                              icon: _loadingStates[order.id] == true
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.notifications_active),
-                              label: const Text('Notify Rider - Ready for Pickup'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                          // Only show "Notify Rider" button if order is not yet picked up
+                          if (order.status != DeliveryStatus.pickedUp && order.status != DeliveryStatus.inTransit) ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _loadingStates[order.id] == true
+                                    ? null
+                                    : () => _notifyRiderReadyForPickup(order.id),
+                                icon: _loadingStates[order.id] == true
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.notifications_active),
+                                label: const Text('Notify Rider - Ready for Pickup'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
                       );
-                    } else {
+                      } else {
                       // Payment is pending confirmation - show status message
                       String statusMessage;
                       if (isInPerson) {
                         statusMessage = 'In-person payment offer sent. Waiting for rider to confirm the offer.';
-                      } else {
-                        statusMessage = 'Payment submitted. Waiting for rider confirmation.';
-                      }
-                      
-                      return Column(
-                        children: [
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.success),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.check_circle, color: AppColors.success, size: 20),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    statusMessage,
-                                    style: TextStyle(
-                                      color: AppColors.success,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                    } else {
+                      statusMessage = 'Payment submitted. Waiting for rider confirmation.';
+                    }
+                    
+                    return Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.success),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  statusMessage,
+                                  style: TextStyle(
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                        ],
-                      );
+                        ),
+                      ],
+                    );
                     }
                   }
                 },
