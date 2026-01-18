@@ -93,6 +93,7 @@ class Delivery {
   final DateTime? completedAt;
   final DateTime createdAt;
   final List<DeliveryItem>? items;
+  final bool paymentRequested;
 
   final String? customerName;
   final String? customerEmail;
@@ -124,6 +125,7 @@ class Delivery {
     this.completedAt,
     required this.createdAt,
     this.items,
+    this.paymentRequested = false,
     this.customerName,
     this.customerEmail,
   });
@@ -205,6 +207,7 @@ class Delivery {
           ? DateTime.parse(json['completed_at'] as String)
           : null,
       createdAt: DateTime.parse(json['created_at'] as String),
+      paymentRequested: json['payment_requested'] as bool? ?? false,
       customerName: usersData?['full_name'] as String?,
       customerEmail: usersData?['email'] as String?,
     );
