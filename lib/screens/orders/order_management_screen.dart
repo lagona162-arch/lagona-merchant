@@ -305,20 +305,12 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                 o.riderId == null)
             .toList();
       case 1:
-
-        final filtered = _orders
+        // Show all waitingForPayment orders (confirmed orders) regardless of rider status
+        // This ensures merchants can always see order details for active orders
+        return _orders
             .where((o) => 
-                o.status == DeliveryStatus.waitingForPayment && 
-                o.riderId != null)
+                o.status == DeliveryStatus.waitingForPayment)
             .toList();
-
-        for (var o in _orders) {
-          final matches = o.status == DeliveryStatus.waitingForPayment && o.riderId != null;
-          if (matches || o.status.value == 'accepted') {
-          }
-        }
-
-        return filtered;
       case 2:
         return _orders
             .where((o) =>
