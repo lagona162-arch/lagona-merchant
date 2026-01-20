@@ -117,17 +117,45 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
     File? imageFile;
     bool isAvailable = product?.isAvailable ?? true;
     bool isSubmitting = false; // Local flag for dialog
+    bool isBatchMode = false; // Batch mode flag (only for new products)
+    int batchCount = 0; // Count of products added in batch mode
 
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(product == null ? 'Add Product' : 'Edit Product'),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(product == null ? 'Add Product' : 'Edit Product'),
+              if (product == null && isBatchMode && batchCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Added $batchCount product${batchCount > 1 ? 's' : ''}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+            ],
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-
+                if (product == null) ...[
+                  CheckboxListTile(
+                    title: const Text('Add Multiple Products (Batch Mode)'),
+                    subtitle: const Text('Keep form open after adding to add more products'),
+                    value: isBatchMode,
+                    onChanged: (value) =>
+                        setDialogState(() => isBatchMode = value ?? false),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 GestureDetector(
                   onTap: () async {
                     final source = await showDialog<ImageSource>(
@@ -247,6 +275,19 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
             ),
           ),
           actions: [
+            if (product == null && isBatchMode && batchCount > 0)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Batch complete! Added $batchCount product${batchCount > 1 ? 's' : ''}.'),
+                      backgroundColor: AppColors.success,
+                    ),
+                  );
+                },
+                child: const Text('Done'),
+              ),
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
@@ -313,6 +354,49 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                       isAvailable: isAvailable,
                       imageFile: imageFile,
                     );
+                    
+                    // Update batch count
+                    setDialogState(() {
+                      batchCount++;
+                    });
+                    
+                    // Reload data to show new product
+                    await _loadData();
+                    
+                    if (mounted) {
+                      setDialogState(() {
+                        isSubmitting = false;
+                      });
+                      
+                      if (isBatchMode) {
+                        // Batch mode: reset form but keep dialog open
+                        setDialogState(() {
+                          nameController.clear();
+                          priceController.clear();
+                          stockController.text = '0';
+                          imageFile = null;
+                          isAvailable = true;
+                          // Keep selectedCategory for convenience
+                        });
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Product added! Form cleared for next product.'),
+                            backgroundColor: AppColors.success,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      } else {
+                        // Single mode: close dialog
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Product added successfully'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      }
+                    }
                   } else {
                     await ProductService.updateProduct(
                       productId: product!.id,
@@ -323,21 +407,19 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                       isAvailable: isAvailable,
                       imageFile: imageFile,
                     );
-                  }
-                  if (mounted) {
-                    setDialogState(() {
-                      isSubmitting = false;
-                    });
-                    Navigator.pop(context);
-                    await _loadData();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(product == null
-                            ? 'Product added successfully'
-                            : 'Product updated successfully'),
-                        backgroundColor: AppColors.success,
-                      ),
-                    );
+                    if (mounted) {
+                      setDialogState(() {
+                        isSubmitting = false;
+                      });
+                      Navigator.pop(context);
+                      await _loadData();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Product updated successfully'),
+                          backgroundColor: AppColors.success,
+                        ),
+                      );
+                    }
                   }
                 } catch (e) {
                   setDialogState(() {
@@ -359,7 +441,11 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(product == null ? 'Add' : 'Update'),
+                  : Text(
+                      product == null
+                          ? (isBatchMode ? 'Add & Continue' : 'Add')
+                          : 'Update',
+                    ),
             ),
           ],
         ),
