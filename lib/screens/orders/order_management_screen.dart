@@ -347,6 +347,69 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
     return total;
   }
 
+  /// Formats [dateTime] for order/delivery date display.
+  /// Backend often stores PHT wall-clock time as UTC (e.g. 14:57Z for 2:57 PM PHT); using
+  /// UTC components for display avoids double conversion (which would show 10:57 PM).
+  String _formatOrderDate(DateTime dateTime) {
+    final display = dateTime.toUtc();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final m = months[display.month - 1];
+    final d = display.day;
+    final y = display.year;
+    final h = display.hour;
+    final min = display.minute.toString().padLeft(2, '0');
+    return '$m $d, $y at ${h > 12 ? h - 12 : (h == 0 ? 12 : h)}:$min ${h >= 12 ? 'PM' : 'AM'}';
+  }
+
+  Future<void> _cancelPendingOrder(String orderId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Order'),
+        content: const Text(
+          'Are you sure you want to cancel this order? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Yes, Cancel Order'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _loadingStates[orderId] = true);
+    try {
+      await OrderService.updateOrderStatus(orderId, DeliveryStatus.cancelled);
+      await _loadOrders();
+      if (mounted) {
+        setState(() => _loadingStates[orderId] = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order cancelled'),
+            backgroundColor: AppColors.textSecondary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingStates[orderId] = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to cancel order: ${e.toString()}'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _findAndAssignRider(String orderId) async {
     if (_currentMerchantId == null) return;
 
@@ -2060,6 +2123,14 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                               ),
                             ],
                                     ),
+            const SizedBox(height: 6),
+            Text(
+              'Order date: ${_formatOrderDate(order.createdAt)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
                                   const SizedBox(height: 16),
             Row(
                           children: [
@@ -2095,6 +2166,20 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: _loadingStates[order.id] == true
+                    ? null
+                    : () => _cancelPendingOrder(order.id),
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: const Text('Cancel Order'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                ),
+              ),
             ),
           ],
         ),
