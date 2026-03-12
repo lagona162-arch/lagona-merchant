@@ -570,6 +570,8 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
       const priorityExclusiveWindow = Duration(minutes: 1); // First minute for priority only
 
       // Step 1: Send offers to priority riders (expires after 10 minutes total)
+      // Track all rider IDs we've already sent an offer to (so we include recently-online riders)
+      final riderIdsSentOffer = <String>{};
       List<Rider> priorityRiders = [];
       List<Rider> availablePriorityRiders = [];
       
@@ -588,6 +590,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         // Send offers to all priority riders (expire after total 10-minute window)
         for (var rider in availablePriorityRiders) {
           if (isCancelled) break; // Stop if cancelled
+          riderIdsSentOffer.add(rider.id);
           try {
             await RiderService.sendDeliveryOffer(
               deliveryId: orderId,
@@ -609,20 +612,39 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
           await Future.delayed(checkInterval);
           checksRemaining--;
 
+          // Every cycle: re-fetch from DB so we detect status changes (e.g. rider just went online)
+          try {
+            final refreshedPriority = await RiderService.getPriorityRiders(_currentMerchantId!);
+            final newlyAvailable = refreshedPriority
+                .where((r) => r.isAvailable && !riderIdsSentOffer.contains(r.id))
+                .toList();
+            for (var rider in newlyAvailable) {
+              if (isCancelled || assignedRiderId != null) break;
+              riderIdsSentOffer.add(rider.id);
+              try {
+                await RiderService.sendDeliveryOffer(
+                  deliveryId: orderId,
+                  riderId: rider.id,
+                  offerType: 'priority',
+                  expiresIn: totalWindow - DateTime.now().difference(startTime),
+                );
+              } catch (e) {
+                debugPrint('Error sending late offer to priority rider ${rider.id}: $e');
+              }
+            }
+          } catch (e) {
+            debugPrint('Error re-fetching priority riders: $e');
+          }
+
           // Update dialog phase
           if (mounted && !isCancelled) {
             phaseNotifier.value = 'Waiting for priority riders... (${availablePriorityRiders.length} riders)';
           }
 
-          // Check if any priority rider accepted
-          for (var rider in availablePriorityRiders) {
-            if (await RiderService.checkRiderAcceptedOffer(
-              deliveryId: orderId,
-              riderId: rider.id,
-            )) {
-            assignedRiderId = rider.id;
-              break;
-            }
+          // Check if any rider accepted (including newly-online priority riders we just sent to)
+          final acceptedId = await RiderService.checkAnyRiderAccepted(orderId);
+          if (acceptedId != null) {
+            assignedRiderId = acceptedId;
           }
         }
       }
@@ -664,6 +686,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
           // Send broadcast offers to non-priority riders (expires at end of 10-minute window)
           for (var rider in ridersToBroadcast) {
             if (isCancelled) break; // Stop if cancelled
+            riderIdsSentOffer.add(rider.id);
             try {
               await RiderService.sendDeliveryOffer(
                 deliveryId: orderId,
@@ -684,6 +707,38 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
           while (broadcastChecksRemaining > 0 && assignedRiderId == null && !isCancelled) {
             await Future.delayed(broadcastCheckInterval);
             broadcastChecksRemaining--;
+
+            // Every cycle: re-fetch from DB so we detect status changes (e.g. rider just went online)
+            try {
+              final remaining = totalWindow - DateTime.now().difference(startTime);
+              if (remaining.inSeconds > 0) {
+                final refreshedNearby = await RiderService.getRidersWithinRadius(
+                  latitude: order.pickupLatitude!,
+                  longitude: order.pickupLongitude!,
+                  radiusKm: 5.0,
+                  excludeRiderIds: null,
+                );
+                final newlyNearby = refreshedNearby
+                    .where((r) => !riderIdsSentOffer.contains(r.id))
+                    .toList();
+                for (var rider in newlyNearby) {
+                  if (isCancelled || assignedRiderId != null) break;
+                  riderIdsSentOffer.add(rider.id);
+                  try {
+                    await RiderService.sendDeliveryOffer(
+                      deliveryId: orderId,
+                      riderId: rider.id,
+                      offerType: 'broadcast',
+                      expiresIn: remaining,
+                    );
+                  } catch (e) {
+                    debugPrint('Error sending late broadcast offer to rider ${rider.id}: $e');
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint('Error re-fetching nearby riders: $e');
+            }
 
             // Update dialog phase
             if (mounted && !isCancelled) {
@@ -707,12 +762,11 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
           // Expire all remaining offers after 10-minute window
           await RiderService.expireOldOffers(orderId);
         } else {
-          // No nearby riders found, but keep the dialog open and continue checking
+          // No nearby riders found initially; keep checking and re-fetch so recently-online riders get offers
           if (mounted && !isCancelled) {
-            phaseNotifier.value = 'No nearby riders found. Waiting for priority riders...';
+            phaseNotifier.value = 'No nearby riders found. Waiting for riders to come online...';
           }
 
-          // Wait and check for acceptances from priority riders until 10 minutes total
           final elapsed = DateTime.now().difference(startTime);
           final remainingTime = totalWindow - elapsed;
           const broadcastCheckInterval = Duration(seconds: 2);
@@ -722,9 +776,41 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
             await Future.delayed(broadcastCheckInterval);
             broadcastChecksRemaining--;
 
+            // Every cycle: re-fetch from DB so we detect status changes (e.g. rider just went online)
+            try {
+              final remaining = totalWindow - DateTime.now().difference(startTime);
+              if (remaining.inSeconds > 0) {
+                final refreshedNearby = await RiderService.getRidersWithinRadius(
+                  latitude: order.pickupLatitude!,
+                  longitude: order.pickupLongitude!,
+                  radiusKm: 5.0,
+                  excludeRiderIds: null,
+                );
+                final newlyNearby = refreshedNearby
+                    .where((r) => !riderIdsSentOffer.contains(r.id))
+                    .toList();
+                for (var rider in newlyNearby) {
+                  if (isCancelled || assignedRiderId != null) break;
+                  riderIdsSentOffer.add(rider.id);
+                  try {
+                    await RiderService.sendDeliveryOffer(
+                      deliveryId: orderId,
+                      riderId: rider.id,
+                      offerType: 'broadcast',
+                      expiresIn: remaining,
+                    );
+                  } catch (e) {
+                    debugPrint('Error sending broadcast offer to newly-online rider ${rider.id}: $e');
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint('Error re-fetching nearby riders (no-initial-nearby): $e');
+            }
+
             // Update dialog phase
             if (mounted && !isCancelled) {
-              phaseNotifier.value = 'No nearby riders found. Waiting for priority riders...';
+              phaseNotifier.value = 'No nearby riders found. Waiting for riders to come online...';
             }
 
             // Check if ANY rider accepted (more efficient - single query)
@@ -1513,8 +1599,250 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
     );
   }
 
-  void _showOrderDetails(Delivery order) async {
+  Widget _buildOrderDetailsContent(
+    Delivery order,
+    List<DeliveryItem> items,
+    double total,
+    Map<String, dynamic>? customerInfo,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (order.customerId != null) ...[
+          if (customerInfo != null && customerInfo['full_name'] != null)
+            _buildDetailRow('Customer Name', customerInfo['full_name'] as String),
+          _buildDetailRow('Customer ID', order.customerId!),
+        ],
+        if (order.pickupAddress != null)
+          _buildDetailRow('Pickup Address', order.pickupAddress!),
+        if (order.dropoffAddress != null)
+          _buildDetailRow('Delivery Address', order.dropoffAddress!),
+        if (order.pickupPhotoUrl != null || order.dropoffPhotoUrl != null) ...[
+          const SizedBox(height: 16),
+          const Text(
+            'Rider Photos:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (order.pickupPhotoUrl != null)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Pickup Photo',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        onTap: () => _showImageFullScreen(
+                          order.pickupPhotoUrl!,
+                          'Pickup Photo',
+                        ),
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.primary,
+                              width: 2,
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: Image.network(
+                              order.pickupPhotoUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.error_outline,
+                                  color: Colors.grey,
+                                );
+                              },
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const Center(
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (order.pickupPhotoUrl != null && order.dropoffPhotoUrl != null)
+                const SizedBox(width: 16),
+              if (order.dropoffPhotoUrl != null)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Dropoff Photo',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      GestureDetector(
+                        onTap: () => _showImageFullScreen(
+                          order.dropoffPhotoUrl!,
+                          'Dropoff Photo',
+                        ),
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.primary,
+                              width: 2,
+                            ),
+                          ),
+                          child: ClipOval(
+                            child: Image.network(
+                              order.dropoffPhotoUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.error_outline,
+                                  color: Colors.grey,
+                                );
+                              },
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const Center(
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+        if (order.deliveryFee != null)
+          _buildDetailRow('Delivery Fee', '₱${order.deliveryFee!.toStringAsFixed(2)}'),
+        if (order.riderId != null) ...[
+          _buildDetailRow('Rider Assigned', _getRiderName(order.riderId)),
+          Builder(
+            builder: (context) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _loadRiderInfo(order.riderId);
+              });
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+        const SizedBox(height: 16),
+        const Text(
+          'Order Items:',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        if (items.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              'No items found',
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: Colors.grey,
+              ),
+            ),
+          )
+        else
+          ...items.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${item.product?.name ?? "Product ${item.productId}"} x${item.quantity}',
+                              style: const TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                          Text(
+                            '₱${item.subtotal.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (item.addons.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        ...item.addons.map((addon) => Padding(
+                              padding: const EdgeInsets.only(left: 16, top: 4),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '  + ${addon.name} x${addon.quantity}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '₱${addon.subtotal.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )),
+                      ],
+                    ],
+                  ),
+                ),
+              )),
+        const SizedBox(height: 8),
+        const Divider(),
+        Text(
+          'Total: ₱${total.toStringAsFixed(2)}',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+      ],
+    );
+  }
 
+  void _showOrderDetails(Delivery order) async {
     if (order.customerId != null) {
       await _loadCustomerInfo(order.customerId!);
     }
@@ -1534,249 +1862,56 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
       builder: (context) => AlertDialog(
         title: Text('Order #${order.id.substring(0, 8)}'),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (order.customerId != null) ...[
-                if (customerInfo != null && customerInfo['full_name'] != null)
-                  _buildDetailRow('Customer Name', customerInfo['full_name'] as String),
-                _buildDetailRow('Customer ID', order.customerId!),
-              ],
-              if (order.pickupAddress != null)
-                _buildDetailRow('Pickup Address', order.pickupAddress!),
-              if (order.dropoffAddress != null)
-                _buildDetailRow('Delivery Address', order.dropoffAddress!),
-
-              if (order.pickupPhotoUrl != null || order.dropoffPhotoUrl != null) ...[
-                const SizedBox(height: 16),
-                const Text(
-                  'Rider Photos:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    if (order.pickupPhotoUrl != null)
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Pickup Photo',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            GestureDetector(
-                              onTap: () => _showImageFullScreen(
-                                order.pickupPhotoUrl!,
-                                'Pickup Photo',
-                              ),
-                              child: Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppColors.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: ClipOval(
-                                  child: Image.network(
-                                    order.pickupPhotoUrl!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return const Icon(
-                                        Icons.error_outline,
-                                        color: Colors.grey,
-                                      );
-                                    },
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) return child;
-                                      return const Center(
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      );
-            },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (order.pickupPhotoUrl != null && order.dropoffPhotoUrl != null)
-                      const SizedBox(width: 16),
-                    if (order.dropoffPhotoUrl != null)
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Dropoff Photo',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textSecondary,
-                              ),
-              ),
-                            const SizedBox(height: 4),
-                            GestureDetector(
-                              onTap: () => _showImageFullScreen(
-                                order.dropoffPhotoUrl!,
-                                'Dropoff Photo',
-                              ),
-                              child: Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppColors.primary,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: ClipOval(
-                                  child: Image.network(
-                                    order.dropoffPhotoUrl!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return const Icon(
-                                        Icons.error_outline,
-                                        color: Colors.grey,
-                                      );
-                                    },
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) return child;
-                                      return const Center(
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-              ),
-            ],
-                        ),
-          ),
-        ],
-      ),
-              ],
-              if (order.deliveryFee != null)
-                _buildDetailRow('Delivery Fee', '₱${order.deliveryFee!.toStringAsFixed(2)}'),
-              if (order.riderId != null) ...[
-                _buildDetailRow('Rider Assigned', _getRiderName(order.riderId)),
-
-                Builder(
-                  builder: (context) {
-
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _loadRiderInfo(order.riderId);
-                    });
-                    return const SizedBox.shrink();
-                  },
-                ),
-              ],
-              const SizedBox(height: 16),
-              const Text(
-                'Order Items:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              if (items.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text(
-                    'No items found',
-                    style: TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey,
-                    ),
-                  ),
-                )
-              else
-                ...items.map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${item.product?.name ?? "Product ${item.productId}"} x${item.quantity}',
-                                style: const TextStyle(fontWeight: FontWeight.w500),
-                              ),
-                            ),
-                            Text(
-                              '₱${item.subtotal.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
-                              ),
-              ),
-                              ],
-                            ),
-                            if (item.addons.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              ...item.addons.map((addon) => Padding(
-                                    padding: const EdgeInsets.only(left: 16, top: 4),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            '  + ${addon.name} x${addon.quantity}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: AppColors.textSecondary,
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                          ),
-                                        ),
-                                        Text(
-                                          '₱${addon.subtotal.toStringAsFixed(2)}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: AppColors.textSecondary,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )),
-                            ],
-                          ],
-                        ),
-                      ),
-                    )),
-              const SizedBox(height: 8),
-              const Divider(),
-              Text(
-                'Total: ₱${total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-          ),
-        ],
-      ),
+          child: _buildOrderDetailsContent(order, items, total, customerInfo),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRequestPaymentDialog(Delivery order) async {
+    if (order.customerId != null) {
+      await _loadCustomerInfo(order.customerId!);
+    }
+
+    if (!_orderItems.containsKey(order.id) || (_orderItems[order.id]?.isEmpty ?? true)) {
+      await _loadOrderDetails(order.id);
+    }
+
+    if (!mounted) return;
+
+    final items = _orderItems[order.id] ?? [];
+    final total = _calculateOrderTotal(order.id);
+    final customerInfo = order.customerId != null ? _customerInfo[order.customerId] : null;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Request Payment - Order #${order.id.substring(0, 8)}'),
+        content: SingleChildScrollView(
+          child: _buildOrderDetailsContent(order, items, total, customerInfo),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _requestPayment(order.id);
+            },
+            icon: const Icon(Icons.payment, size: 18),
+            label: const Text('Send Payment Request'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),
@@ -2265,7 +2400,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                 child: ElevatedButton.icon(
                   onPressed: (_loadingStates[order.id] == true || _paymentRequested[order.id] == true)
                       ? null
-                      : () => _requestPayment(order.id),
+                      : () => _showRequestPaymentDialog(order),
                   icon: _loadingStates[order.id] == true
                       ? const SizedBox(
                           width: 16,
@@ -2429,16 +2564,31 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                                     const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () => _showPaymentDetails(receipt),
+              child: OutlinedButton.icon(
+                onPressed: () => _showOrderDetails(order),
+                icon: const Icon(Icons.visibility, size: 20),
+                label: const Text('View Order Details'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(color: AppColors.primary),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                child: const Text('View Details'),
-                              ),
-                            ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => _showPaymentDetails(receipt),
+                icon: const Icon(Icons.receipt_long, size: 16),
+                label: const Text('View payment receipt'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
                           ],
                         ),
       ),
