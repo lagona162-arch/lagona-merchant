@@ -3,8 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/colors.dart';
 import '../../models/order.dart';
 import '../../models/payment.dart';
@@ -436,15 +437,20 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
       return;
     }
 
-    // Clean up any existing offers before starting a new search
+    // Delete any pending/expired offers so this attempt starts clean (2nd attempt creates fresh)
     try {
-      await RiderService.expireAllPendingOffers(orderId);
-      // Small delay to ensure database has processed the expiration
+      await RiderService.deleteAllOffersForDelivery(orderId);
       await Future.delayed(const Duration(milliseconds: 100));
     } catch (e) {
-      debugPrint('Error expiring old offers before new search: $e');
+      debugPrint('Error deleting old offers before new search: $e');
       // Continue anyway - don't block the new search
     }
+
+    // Verify Supabase rider statuses (logs to console: available, online, busy, offline counts)
+    try {
+      final statusCounts = await RiderService.getRiderStatusesFromSupabase();
+      debugPrint('Find rider: Supabase rider statuses = $statusCounts');
+    } catch (_) {}
 
     // Initialize variables
     final startTime = DateTime.now();
@@ -566,10 +572,11 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
 
     try {
       String? assignedRiderId;
-      const totalWindow = Duration(minutes: 10); // Total 10-minute window
-      const priorityExclusiveWindow = Duration(minutes: 1); // First minute for priority only
+      // 10 min total: 1 min priority-only (merchant's priority riders), then 9 min broadcast (all available)
+      const totalWindow = Duration(minutes: 10);
+      const priorityExclusiveWindow = Duration(minutes: 1);
 
-      // Step 1: Send offers to priority riders (expires after 10 minutes total)
+      // Step 1: Priority riders only — offer_type=priority, 10 min expiry
       // Track all rider IDs we've already sent an offer to (so we include recently-online riders)
       final riderIdsSentOffer = <String>{};
       List<Rider> priorityRiders = [];
@@ -620,6 +627,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                 .toList();
             for (var rider in newlyAvailable) {
               if (isCancelled || assignedRiderId != null) break;
+              if (riderIdsSentOffer.contains(rider.id)) continue; // already sent this run
               riderIdsSentOffer.add(rider.id);
               try {
                 await RiderService.sendDeliveryOffer(
@@ -649,11 +657,16 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         }
       }
 
-      // Step 2: After 1 minute, if no priority rider accepted, broadcast to ALL nearby riders
+      // Step 2: After 1 min, broadcast to all nearby — offer_type=broadcast, remaining ~9 min
       if (assignedRiderId == null && !isCancelled) {
-        // Update dialog to show broadcast phase
         if (mounted && !isCancelled) {
           phaseNotifier.value = 'Broadcasting to nearby riders...';
+        }
+
+        // Update existing priority offers to broadcast (so DB shows offer_type=broadcast after 1 min)
+        final remainingAfterPriority = totalWindow - DateTime.now().difference(startTime);
+        if (remainingAfterPriority.inSeconds > 0) {
+          await RiderService.updatePriorityOffersToBroadcast(orderId, remainingAfterPriority);
         }
 
         // Get ALL nearby riders within 5km (including priority riders - they can still accept)
@@ -723,6 +736,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                     .toList();
                 for (var rider in newlyNearby) {
                   if (isCancelled || assignedRiderId != null) break;
+                  if (riderIdsSentOffer.contains(rider.id)) continue; // already sent this run
                   riderIdsSentOffer.add(rider.id);
                   try {
                     await RiderService.sendDeliveryOffer(
@@ -791,6 +805,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
                     .toList();
                 for (var rider in newlyNearby) {
                   if (isCancelled || assignedRiderId != null) break;
+                  if (riderIdsSentOffer.contains(rider.id)) continue; // already sent this run
                   riderIdsSentOffer.add(rider.id);
                   try {
                     await RiderService.sendDeliveryOffer(
@@ -835,14 +850,15 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
       // Stop progress timer
       progressTimer?.cancel();
 
-      // If cancelled, stop the process and clean up offers
+      // If cancelled, delete only this run's queued offers (the riders we sent to)
       if (isCancelled) {
-        // Clean up any offers that were sent before cancellation
         try {
-          await RiderService.expireAllPendingOffers(orderId);
+          await RiderService.deleteOffersForDeliveryAndRiders(
+            orderId,
+            riderIdsSentOffer,
+          );
         } catch (e) {
-          debugPrint('Error expiring offers on cancellation: $e');
-          // Continue with cleanup even if this fails
+          debugPrint('Error deleting offers on cancellation: $e');
         }
         
         // Dialog should already be closed by cancel button, but ensure it's closed
@@ -921,11 +937,11 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
       // Stop progress timer on error
       progressTimer?.cancel();
       
-      // Clean up offers on error
+      // Clean up offers on error so next attempt starts clean
       try {
-        await RiderService.expireAllPendingOffers(orderId);
+        await RiderService.deleteAllOffersForDelivery(orderId);
       } catch (cleanupError) {
-        debugPrint('Error expiring offers on exception: $cleanupError');
+        debugPrint('Error deleting offers on exception: $cleanupError');
       }
       
       if (mounted) {
@@ -2024,21 +2040,29 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
 
   Future<void> _downloadImage(String imageUrl) async {
     try {
-
-
       final uri = Uri.parse(imageUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Opening image in browser. You can download it from there.'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
-      } else {
-        throw Exception('Could not launch URL');
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        throw Exception('Failed to fetch image (${response.statusCode})');
+      }
+      final bytes = response.bodyBytes;
+      if (bytes.isEmpty) throw Exception('Image was empty');
+
+      final dir = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+      if (!await dir.exists()) await dir.create(recursive: true);
+
+      final ext = _imageExtensionFromUrl(imageUrl);
+      final name = 'payment_screenshot_${DateTime.now().millisecondsSinceEpoch}$ext';
+      final file = File('${dir.path}/$name');
+      await file.writeAsBytes(bytes);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Image saved to ${dir.path}'),
+            backgroundColor: AppColors.success,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -2050,6 +2074,16 @@ class _OrderManagementScreenState extends State<OrderManagementScreen>
         );
       }
     }
+  }
+
+  String _imageExtensionFromUrl(String url) {
+    try {
+      final path = Uri.parse(url).path.toLowerCase();
+      if (path.endsWith('.png')) return '.png';
+      if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return '.jpg';
+      if (path.endsWith('.webp')) return '.webp';
+    } catch (_) {}
+    return '.png';
   }
 
   void _showPaymentDetails(PaymentReceipt receipt) {

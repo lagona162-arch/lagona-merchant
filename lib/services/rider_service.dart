@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/rider.dart';
 import '../services/supabase_service.dart';
 import '../services/merchant_service.dart';
@@ -281,6 +282,7 @@ class RiderService {
   static Future<List<Rider>> getAvailableRiders() async {
     try {
 
+      // DB uses enum rider_status; only 'available' is valid for "can accept". (no 'online' in enum)
       final riders = await SupabaseService.client
           .from('riders')
           .select('*')
@@ -323,7 +325,7 @@ class RiderService {
           riderJson['vehicle_number'] = riderJson['plate_number'];
         }
 
-        riderJson['is_available'] = true;
+        riderJson['is_available'] = true; // already filtered to available
 
         return Rider.fromJson(riderJson);
       }).toList();
@@ -347,6 +349,27 @@ class RiderService {
     } catch (e) {
       debugPrint('Error checking rider availability: $e');
       return false;
+    }
+  }
+
+  /// Fetches rider statuses from Supabase to verify connection and see which
+  /// status values exist in the DB. Expected: available, online (can accept),
+  /// busy (has active order), offline. Returns map of status -> count.
+  static Future<Map<String, int>> getRiderStatusesFromSupabase() async {
+    try {
+      final response = await SupabaseService.client
+          .from('riders')
+          .select('status');
+      final counts = <String, int>{};
+      for (final row in response) {
+        final status = row['status'] as String? ?? 'null';
+        counts[status] = (counts[status] ?? 0) + 1;
+      }
+      debugPrint('Supabase riders statuses: $counts');
+      return counts;
+    } catch (e) {
+      debugPrint('Error fetching rider statuses from Supabase: $e');
+      return {};
     }
   }
 
@@ -582,32 +605,36 @@ class RiderService {
     required Duration expiresIn, // Total time until expiration (from now)
   }) async {
     try {
-      // First, expire any existing offers for this delivery_id + rider_id combination
-      // This prevents duplicate offer errors
-      try {
-        await SupabaseService.client
-            .from('delivery_offers')
-            .update({'status': 'expired'})
-            .eq('delivery_id', deliveryId)
-            .eq('rider_id', riderId)
-            .eq('status', 'pending');
-      } catch (e) {
-        debugPrint('Warning: Error expiring existing offers before sending new one: $e');
-        // Continue anyway - try to insert the new offer
-      }
-      
       // Calculate expiration time in PHT, then convert to UTC for database
       final phtNow = TimezoneHelper.nowPHT();
       final phtExpiresAt = phtNow.add(expiresIn);
       final utcExpiresAt = TimezoneHelper.phtToUTC(phtExpiresAt);
-      
-      await SupabaseService.client.from('delivery_offers').insert({
+
+      final row = {
         'delivery_id': deliveryId,
         'rider_id': riderId,
         'offer_type': offerType,
         'status': 'pending',
         'expires_at': utcExpiresAt.toIso8601String(),
-      });
+      };
+
+      // Idempotent: insert; if duplicate (rider already has offer), refresh expiry only (keep offer_type)
+      try {
+        await SupabaseService.client.from('delivery_offers').insert(row);
+      } on PostgrestException catch (e) {
+        if (e.code == '23505') {
+          await SupabaseService.client
+              .from('delivery_offers')
+              .update({
+                'status': 'pending',
+                'expires_at': utcExpiresAt.toIso8601String(),
+              })
+              .eq('delivery_id', deliveryId)
+              .eq('rider_id', riderId);
+        } else {
+          rethrow;
+        }
+      }
 
       // Send notification to rider
       final minutesRemaining = expiresIn.inMinutes;
@@ -722,6 +749,93 @@ class RiderService {
           .eq('status', 'pending');
     } catch (e) {
       debugPrint('Error expiring all pending offers: $e');
+    }
+  }
+
+  /// Delete all pending and expired offers for a delivery. Call at start of
+  /// find rider and when merchant cancels. Does not touch accepted offers.
+  /// If delete is not allowed (e.g. RLS), falls back to expiring them.
+  static Future<void> deleteAllOffersForDelivery(String deliveryId) async {
+    try {
+      await SupabaseService.client
+          .from('delivery_offers')
+          .delete()
+          .eq('delivery_id', deliveryId)
+          .or('status.eq.pending,status.eq.expired');
+    } catch (e) {
+      debugPrint('Error deleting delivery offers (trying expire instead): $e');
+      try {
+        await SupabaseService.client
+            .from('delivery_offers')
+            .update({'status': 'expired'})
+            .eq('delivery_id', deliveryId)
+            .eq('status', 'pending');
+      } catch (e2) {
+        debugPrint('Error expiring delivery offers: $e2');
+      }
+    }
+  }
+
+  /// Delete only the queued (pending) offers for this delivery and these riders.
+  /// Call when merchant cancels. Uses RPC so it works even when RLS blocks direct delete.
+  static Future<void> deleteOffersForDeliveryAndRiders(
+    String deliveryId,
+    Iterable<String> riderIds,
+  ) async {
+    if (riderIds.isEmpty) return;
+    final list = riderIds.toList();
+    try {
+      await SupabaseService.client.rpc(
+        'cancel_find_rider_offers',
+        params: {'p_delivery_id': deliveryId, 'p_rider_ids': list},
+      );
+    } catch (e) {
+      debugPrint('RPC cancel_find_rider_offers failed (run the SQL migration?): $e');
+      try {
+        await SupabaseService.client
+            .from('delivery_offers')
+            .delete()
+            .eq('delivery_id', deliveryId)
+            .eq('status', 'pending')
+            .inFilter('rider_id', list);
+      } catch (e2) {
+        debugPrint('Client delete failed: $e2');
+        for (final riderId in list) {
+          try {
+            await SupabaseService.client
+                .from('delivery_offers')
+                .update({'status': 'expired'})
+                .eq('delivery_id', deliveryId)
+                .eq('rider_id', riderId)
+                .eq('status', 'pending');
+          } catch (_) {}
+        }
+      }
+    }
+  }
+
+  /// After the 1-min priority window, update all pending priority offers for this
+  /// delivery to broadcast (offer_type and is_priority reflect the broadcast phase).
+  static Future<void> updatePriorityOffersToBroadcast(
+    String deliveryId,
+    Duration remainingTime,
+  ) async {
+    try {
+      final utcExpiresAt = TimezoneHelper.phtToUTC(
+        TimezoneHelper.nowPHT().add(remainingTime),
+      );
+      await SupabaseService.client
+          .from('delivery_offers')
+          .update({
+            'offer_type': 'broadcast',
+            'expires_at': utcExpiresAt.toIso8601String(),
+            'is_priority': false,
+          })
+          .eq('delivery_id', deliveryId)
+          .eq('offer_type', 'priority')
+          .eq('status', 'pending');
+    } catch (e) {
+      debugPrint('Error updating priority offers to broadcast: $e');
     }
   }
 }
